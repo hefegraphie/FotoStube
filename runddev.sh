@@ -1,12 +1,10 @@
 #!/bin/bash
 
-# Clone Git repository
-
-echo "Bitte Git-Repository URL eingeben:"
-read git_url
+# Repository URL fest vorgegeben
+git_url="https://github.com/hefegraphie/FotoStube"
 
 if [ -d "FotoStube" ]; then
-  echo "FotoStube directory exists, pulling latest changes..."
+  echo "FotoStube Verzeichnis existiert, hole neueste Änderungen..."
   cd FotoStube && git pull
 else
   git clone "$git_url" FotoStube
@@ -29,8 +27,7 @@ npm install sharp
 
 export PORT=5000
 
-# PostgreSQL setup
-
+# PostgreSQL Setup
 read -p "Geben Sie den PostgreSQL Benutzername ein (z.B. hefe): " pg_user
 read -sp "Geben Sie das Passwort für PostgreSQL Benutzer $pg_user ein: " pg_pass
 echo
@@ -41,14 +38,14 @@ CREATE USER $pg_user WITH PASSWORD '$pg_pass';
 GRANT ALL PRIVILEGES ON DATABASE fotostube TO $pg_user;
 EOF
 
-# Create .env file
+# .env Datei anlegen
 cat <<EOF > .env
 DATABASE_URL=postgresql://$pg_user:$pg_pass@localhost:5432/fotostube
 EOF
 
 npm run db:push
 
-# Insert sample user
+# Beispiel-User anlegen
 read -p "Geben Sie den Username für Testbenutzer ein (z.B. alex): " test_user
 read -p "Geben Sie die Email für Testbenutzer ein (z.B. alex@example.com): " test_email
 read -sp "Geben Sie das Passwort für Testbenutzer ein: " test_pass
