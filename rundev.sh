@@ -74,10 +74,10 @@ npm run db:push
 wait_for_continue
 
 # Beispiel-User anlegen
-read -p "Geben Sie den Username für Testbenutzer ein (z.B. alex): " test_user
-read -p "Geben Sie die Email für Testbenutzer ein (z.B. alex@example.com): " test_email
+read -p "Geben Sie den Username für Testbenutzer ein (z.B. Peter): " test_user
+read -p "Geben Sie die Email für Testbenutzer ein (z.B. peter@example.com): " test_email
 read -sp "Geben Sie das Passwort für Testbenutzer ein: " test_pass
-read -p "Geben Sie den Namen für Testbenutzer ein: " test_name
+read -p "Geben Sie den Namen für Testbenutzer ein (wird in der Galerie angezeigt): " test_name
 
 psql postgresql://$pg_user:$pg_pass@localhost:5432/fotostube <<EOF
 INSERT INTO users (username, email, password, name) VALUES ('$test_user', '$test_email', '$test_pass', '$test_name');
