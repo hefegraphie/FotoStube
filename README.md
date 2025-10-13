@@ -28,3 +28,26 @@ npm run dev
 ---
 
 So ist der schnelle Entwicklungsstart für FotoStube gewährleistet.
+
+# FotoStube Produktiv-Setup
+## Installation & Start
+```
+apt update
+
+apt install curl
+
+curl -fsSL https://github.com/hefegraphie/FotoStube/raw/main/prodinstall.sh -o prodinstall.sh &&
+chmod +x prodinstall.sh &&
+sudo ./prodinstall.sh
+```
+# FotoStube Update
+## Update & Start
+```
+apt update
+
+apt install curl
+
+curl -fsSL https://github.com/hefegraphie/FotoStube/raw/main/update.sh -o update.sh &&
+chmod +x update.sh &&
+sudo ./update.sh
+```
