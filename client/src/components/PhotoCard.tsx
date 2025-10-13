@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Star, Heart, Check, Trash2, X } from "lucide-react";
+import { useState, useCallback } from "react";
+import { Star, Heart, Trash2, X, Check } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { AspectRatio } from "@/components/ui/aspect-ratio";
@@ -34,9 +34,19 @@ interface PhotoCardProps {
   showControls?: boolean; // New prop to control if rating/like controls are shown
 }
 
-export default function PhotoCard({ photo, onOpenLightbox, onToggleLike, onRatingChange, onToggleSelection, onDelete, showControls = true }: PhotoCardProps) {
+export default function PhotoCard({
+  photo,
+  onOpenLightbox,
+  onToggleLike,
+  onRatingChange,
+  onToggleSelection,
+  onDelete,
+  showControls = true,
+}: PhotoCardProps) {
   const [isDeleting, setIsDeleting] = useState(false);
-  
+  const [imageLoaded, setImageLoaded] = useState(false);
+  const [imageError, setImageError] = useState(false);
+
   // Try to get user from auth context, but make it optional for public galleries
   let user = null;
   try {
@@ -46,17 +56,17 @@ export default function PhotoCard({ photo, onOpenLightbox, onToggleLike, onRatin
     // Not in auth context (public gallery), user remains null
   }
 
-  const handleRatingClick = (rating: number) => {
+  const handleRatingClick = useCallback((rating: number) => {
     onRatingChange(photo.id, rating, user?.name);
-  };
+  }, [photo.id, onRatingChange, user?.name]);
 
-  const handleLikeClick = () => {
+  const handleLikeClick = useCallback(() => {
     onToggleLike(photo.id, user?.name);
-  };
+  }, [photo.id, onToggleLike, user?.name]);
 
   const handleDelete = async () => {
     if (isDeleting || !onDelete) return;
-    
+
     setIsDeleting(true);
     try {
       await onDelete(photo.id);
@@ -66,17 +76,44 @@ export default function PhotoCard({ photo, onOpenLightbox, onToggleLike, onRatin
   };
 
   return (
-    <Card className={`overflow-hidden hover-elevate cursor-pointer group ${photo.isSelected ? 'ring-2 ring-primary' : ''}`} data-testid={`card-photo-${photo.id}`}>
+    <Card
+      className={`overflow-hidden hover-elevate cursor-pointer group ${photo.isSelected ? "ring-2 ring-primary" : ""}`}
+      data-testid={`card-photo-${photo.id}`}
+    >
       <div className="relative">
-        <AspectRatio ratio={2/3}>
-          <img
-            src={photo.src}
-            alt={photo.alt}
-            className="w-full h-full object-cover"
-            onClick={() => onOpenLightbox(photo)}
-            data-testid={`img-photo-${photo.id}`}
-          />
-          
+        <AspectRatio ratio={2 / 3}>
+          <div className="relative w-full h-full">
+            {/* Skeleton Placeholder */}
+            {!imageLoaded && !imageError && (
+              <div className="absolute inset-0 bg-muted animate-pulse flex items-center justify-center">
+                <div className="w-8 h-8 bg-muted-foreground/20 rounded"></div>
+              </div>
+            )}
+
+            {/* Error State */}
+            {imageError && (
+              <div className="absolute inset-0 bg-muted flex items-center justify-center">
+                <div className="text-muted-foreground text-sm">
+                  Fehler beim Laden
+                </div>
+              </div>
+            )}
+
+            {/* Actual Image */}
+            <img
+              src={photo.src}
+              alt={photo.alt}
+              loading="lazy"
+              className={`w-full h-full object-cover transition-opacity duration-200 ${
+                imageLoaded ? "opacity-100" : "opacity-0"
+              }`}
+              onClick={() => onOpenLightbox(photo)}
+              onLoad={() => setImageLoaded(true)}
+              onError={() => setImageError(true)}
+              data-testid={`img-photo-${photo.id}`}
+            />
+          </div>
+
           {/* Selection Button - Top Left */}
           <div className="absolute top-2 left-2">
             <Button
@@ -103,7 +140,10 @@ export default function PhotoCard({ photo, onOpenLightbox, onToggleLike, onRatin
                 disabled={isDeleting}
                 onClick={(e) => {
                   e.stopPropagation();
-                  if (!isDeleting && confirm('Möchten Sie dieses Foto wirklich löschen?')) {
+                  if (
+                    !isDeleting &&
+                    confirm("Möchten Sie dieses Foto wirklich löschen?")
+                  ) {
                     handleDelete();
                   }
                 }}
@@ -144,7 +184,10 @@ export default function PhotoCard({ photo, onOpenLightbox, onToggleLike, onRatin
                 />
               </button>
             ))}
-            <span className="text-xs text-muted-foreground ml-1" data-testid={`text-rating-${photo.id}`}>
+            <span
+              className="text-xs text-muted-foreground ml-1"
+              data-testid={`text-rating-${photo.id}`}
+            >
               {photo.rating}
             </span>
           </div>
@@ -166,7 +209,10 @@ export default function PhotoCard({ photo, onOpenLightbox, onToggleLike, onRatin
           </Button>
         </div>
 
-        <p className="text-xs text-muted-foreground" data-testid={`text-comments-${photo.id}`}>
+        <p
+          className="text-xs text-muted-foreground"
+          data-testid={`text-comments-${photo.id}`}
+        >
           {photo.comments.length} comments
         </p>
       </div>

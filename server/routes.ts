@@ -450,20 +450,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "Gallery not found" });
       }
 
+      console.log(`Fetching photos for gallery ${galleryId}...`);
+      const startTime = Date.now();
+
+      // Add timeout for large galleries
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Request timeout - gallery too large')), 30000); // 30s timeout
+      });
+
       // For authenticated users, get photos with data (likes, comments, etc.)
-      // This will now use the correct paths including thumbnails
-      const photos = await storage.getPhotosWithData(galleryId);
+      const photosPromise = storage.getPhotosWithData(galleryId);
+      
+      const photos = await Promise.race([photosPromise, timeoutPromise]) as any[];
+
+      const endTime = Date.now();
+      console.log(`Fetched ${photos.length} photos in ${endTime - startTime}ms`);
 
       // Map photos to use thumbnail paths if available, otherwise original paths
       const photosWithCorrectPaths = photos.map(photo => ({
         ...photo,
-        filePath: photo.thumbnailPath || photo.mediumPath || photo.filePath // Prioritize thumbnail, then medium, then original
+        filePath: photo.filePath // Prioritize thumbnail, then medium, then original
       }));
 
       res.json(photosWithCorrectPaths);
     } catch (error) {
       console.error('Error fetching gallery photos:', error);
-      res.status(500).json({ error: "Failed to fetch photos" });
+      if (error.message === 'Request timeout - gallery too large') {
+        res.status(408).json({ error: "Gallery ist zu groß - Anfrage abgebrochen" });
+      } else {
+        res.status(500).json({ error: "Failed to fetch photos" });
+      }
     }
   });
 
@@ -678,7 +694,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: 'photoIds array is required' });
       }
 
-      console.log('Download request for photos:', photoIds);
+      console.log(`Download request for ${photoIds.length} photos`);
 
       // Set headers for ZIP download
       res.setHeader('Content-Type', 'application/zip');
@@ -696,10 +712,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       for (const photoId of photoIds) {
         try {
-          const photo = await storage.getPhoto(photoId); // Use getPhoto to get photo details
+          const photo = await storage.getPhoto(photoId);
 
           if (photo) {
-            // Use original file path for downloads
             const filePath = photo.filePath || `uploads/galleries/${photo.galleryId}/${photo.filename}`;
 
             try {
@@ -711,23 +726,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
               addedCount++;
             } catch (fileError) {
               console.warn(`Could not access file ${filePath}:`, fileError);
-              // Optionally, you could add a placeholder or error message to the zip
             }
           } else {
             console.warn(`Photo with ID ${photoId} not found.`);
-            // Optionally, you could add a placeholder or error message to the zip
           }
         } catch (photoError) {
           console.error(`Error processing photo ${photoId}:`, photoError);
-          // Optionally, you could add a placeholder or error message to the zip
         }
       }
 
       if (addedCount === 0) {
-        // If no files were added, send an appropriate response
-        archive.finalize(); // Finalize the empty archive
-        res.status(404).json({ error: 'No photos found or accessible for download' });
-        return;
+        archive.finalize();
+        return res.status(404).json({ error: 'No photos found or accessible for download' });
       }
 
       console.log(`Adding ${addedCount} photos to ZIP archive`);
@@ -772,6 +782,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       await storage.setPhotosRating(photoIds, rating);
 
+      // Get updated photos data
+      const updatedPhotos = [];
+      for (const photoId of photoIds) {
+        const photo = await storage.getPhoto(photoId);
+        if (photo) {
+          updatedPhotos.push({
+            id: photo.id,
+            rating: photo.rating || 0
+          });
+        }
+      }
+
       // Create batch notification if multiple photos are rated
       if (photoIds.length > 1) {
         // Get the first photo to determine gallery and owner
@@ -788,32 +810,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
           const message = `${actorText} hat Bild "${firstPhotoName}" und ${otherCount} weitere mit ${rating} ${starText} bewertet`;
 
-          console.log('=== BATCH RATING NOTIFICATION DEBUG ===');
-          console.log('Gallery:', gallery);
-          console.log('Gallery userId:', gallery.userId);
-          console.log('UserName received:', userName);
-          console.log('ActorName:', actorName);
-          console.log('Message:', message);
-
-          try {
-            const notification = await storage.createNotification({
-              userId: gallery.userId,
-              galleryId: gallery.id,
-              photoId: firstPhoto.id,
-              type: 'rating',
-              message,
-              actorName,
-              isRead: false
-            });
-            console.log('Batch notification created successfully:', notification);
-          } catch (error) {
-            console.error('Error creating batch notification:', error);
-          }
-          console.log('=== END BATCH NOTIFICATION DEBUG ===');
+          // Create notification async without blocking response
+          storage.createNotification({
+            userId: gallery.userId,
+            galleryId: gallery.id,
+            photoId: firstPhoto.id,
+            type: 'rating',
+            message,
+            actorName,
+            isRead: false
+          }).catch(error => console.error('Error creating batch notification:', error));
         }
       }
 
-      res.json({ success: true, message: `${photoIds.length} Fotos bewertet` });
+      res.json({ 
+        success: true, 
+        message: `${photoIds.length} Fotos bewertet`,
+        photos: updatedPhotos
+      });
     } catch (error) {
       console.error("Batch rating error:", error);
       res.status(500).json({ error: "Fehler beim Setzen der Bewertungen" });
@@ -830,46 +844,44 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: 'Rating muss zwischen 0 und 5 sein' });
       }
 
-      const photo = await storage.getPhoto(photoId); // Fetch photo to get gallery and userId
-      const gallery = photo ? await storage.getGallery(photo.galleryId) : null;
-      const newRating = rating; // Use the new rating
-
-      // Check if photo and gallery exist and gallery has a userId
-      if (photo && gallery?.userId) {
-        const actorName = userName || 'Anonymer Besucher';
-        const actorText = userName || 'Jemand';
-        const message = `${actorText} hat Bild "${photo.alt}" in Galerie "${gallery.name}" mit ${newRating} Stern${newRating !== 1 ? 'en' : ''} bewertet`;
-        console.log('=== RATING NOTIFICATION DEBUG ===');
-        console.log('Photo:', photo);
-        console.log('Gallery:', gallery);
-        console.log('Gallery userId:', gallery.userId);
-        console.log('UserName received:', userName);
-        console.log('ActorName:', actorName);
-        console.log('Message:', message);
-
-        try {
-          // Create notification directly in database instead of API call
-          const notification = await storage.createNotification({
-            userId: gallery.userId,
-            galleryId: gallery.id,
-            photoId,
-            type: 'rating',
-            message,
-            actorName,
-            isRead: false
-          });
-          console.log('Notification created successfully:', notification);
-        } catch (error) {
-          console.error('Error creating notification:', error);
-        }
-        console.log('=== END NOTIFICATION DEBUG ===');
-      }
-
       const success = await storage.setPhotoRating(photoId, rating);
       if (!success) {
         return res.status(404).json({ error: "Foto nicht gefunden" });
       }
-      res.json({ success: true, rating });
+
+      // Get updated photo data
+      const updatedPhoto = await storage.getPhoto(photoId);
+      if (!updatedPhoto) {
+        return res.status(404).json({ error: "Foto nicht gefunden" });
+      }
+
+      // Create notification asynchronously (don't wait for it)
+      const gallery = await storage.getGallery(updatedPhoto.galleryId);
+
+      if (gallery?.userId) {
+        const actorName = userName || 'Anonymer Besucher';
+        const actorText = userName || 'Jemand';
+        const message = `${actorText} hat Bild "${updatedPhoto.alt}" in Galerie "${gallery.name}" mit ${rating} Stern${rating !== 1 ? 'en' : ''} bewertet`;
+
+        // Create notification async without blocking response
+        storage.createNotification({
+          userId: gallery.userId,
+          galleryId: gallery.id,
+          photoId,
+          type: 'rating',
+          message,
+          actorName,
+          isRead: false
+        }).catch(error => console.error('Error creating notification:', error));
+      }
+
+      res.json({ 
+        success: true, 
+        photo: {
+          id: updatedPhoto.id,
+          rating: updatedPhoto.rating || 0
+        }
+      });
     } catch (error) {
       console.error("Rating error:", error);
       res.status(500).json({ error: "Fehler beim Setzen der Bewertung" });
@@ -905,56 +917,43 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "isLiked muss ein Boolean sein" });
       }
 
-      const photo = await storage.getPhoto(photoId); // Fetch photo to get gallery and userId
-      const gallery = photo ? await storage.getGallery(photo.galleryId) : null;
+      const like = await storage.togglePhotoLike(photoId, isLiked);
 
-      // Log notification debug information if applicable
-      if (photo && gallery?.userId) {
-        const action = isLiked ? 'geliked' : 'entliked';
-        const actorName = userName || 'Anonymer Besucher';
-        const actorText = userName || 'Jemand';
-        const message = `${actorText} hat Bild "${photo.alt}" in Galerie "${gallery.name}" ${action}`;
-        console.log('=== LIKE NOTIFICATION DEBUG ===');
-        console.log('Photo:', photo);
-        console.log('Gallery:', gallery);
-        console.log('Gallery userId:', gallery.userId);
-        console.log('UserName received:', userName);
-        console.log('ActorName:', actorName);
-        console.log('Message:', message);
-
-        try {
-          // Create notification directly in database instead of API call
-          const notification = await storage.createNotification({
-            userId: gallery.userId,
-            galleryId: gallery.id,
-            photoId,
-            type: 'like',
-            message,
-            actorName,
-            isRead: false
-          });
-          console.log('Notification created successfully:', notification);
-        } catch (error) {
-          console.error('Error creating notification:', error);
-        }
-        console.log('=== END NOTIFICATION DEBUG ===');
-      }
-
-      console.log(`Setting like for photo ${photoId}: ${isLiked}`);
-
-      const like = await storage.addPhotoLike(photoId, isLiked);
-
-      // Get updated like status
+      // Get updated like status efficiently
       const allLikes = await storage.getAllPhotoLikes(photoId);
       const likeCount = allLikes.filter((like) => like.isLiked).length;
       const dislikeCount = allLikes.filter((like) => !like.isLiked).length;
       const currentStatus = likeCount > dislikeCount;
 
+      // Create notification asynchronously (don't wait for it)
+      const photo = await storage.getPhoto(photoId);
+      const gallery = photo ? await storage.getGallery(photo.galleryId) : null;
+
+      if (photo && gallery?.userId) {
+        const action = isLiked ? 'geliked' : 'entliked';
+        const actorName = userName || 'Anonymer Besucher';
+        const actorText = userName || 'Jemand';
+        const message = `${actorText} hat Bild "${photo.alt}" in Galerie "${gallery.name}" ${action}`;
+
+        // Create notification async without blocking response
+        storage.createNotification({
+          userId: gallery.userId,
+          galleryId: gallery.id,
+          photoId,
+          type: 'like',
+          message,
+          actorName,
+          isRead: false
+        }).catch(error => console.error('Error creating notification:', error));
+      }
+
       res.json({
         success: true,
-        like,
-        isLiked: currentStatus,
-        likeCount: likeCount,
+        photo: {
+          id: photoId,
+          isLiked: currentStatus,
+          likeCount: likeCount
+        }
       });
     } catch (error) {
       console.error("Set like error:", error);

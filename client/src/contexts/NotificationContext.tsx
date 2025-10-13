@@ -73,11 +73,14 @@ export function NotificationProvider({ children }: NotificationProviderProps) {
   useEffect(() => {
     loadNotifications();
     
-    // Set up polling for new notifications every 5 seconds
-    if (user?.id) {
+    // Check if we're on galleries overview page
+    const isOnGalleriesOverview = window.location.pathname === '/galleries' || window.location.pathname === '/';
+    
+    // Set up polling for new notifications every 30 seconds only on galleries overview
+    if (user?.id && isOnGalleriesOverview) {
       const interval = setInterval(() => {
         loadNotifications();
-      }, 5000);
+      }, 30000);
       
       // Listen for manual refresh events
       const handleRefresh = () => {
@@ -85,8 +88,27 @@ export function NotificationProvider({ children }: NotificationProviderProps) {
       };
       window.addEventListener('refreshNotifications', handleRefresh);
       
+      // Listen for focus events to refresh when user returns to tab
+      const handleFocus = () => {
+        loadNotifications();
+      };
+      window.addEventListener('focus', handleFocus);
+      
       return () => {
         clearInterval(interval);
+        window.removeEventListener('refreshNotifications', handleRefresh);
+        window.removeEventListener('focus', handleFocus);
+      };
+    }
+    
+    // Still listen for manual refresh events on all pages
+    if (user?.id) {
+      const handleRefresh = () => {
+        loadNotifications();
+      };
+      window.addEventListener('refreshNotifications', handleRefresh);
+      
+      return () => {
         window.removeEventListener('refreshNotifications', handleRefresh);
       };
     }

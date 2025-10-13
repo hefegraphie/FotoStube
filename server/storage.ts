@@ -21,7 +21,7 @@ import {
 import pg from "pg";
 const { Pool } = pg;
 import { drizzle } from "drizzle-orm/node-postgres";
-import { eq, and, asc, isNull } from "drizzle-orm";
+import { eq, and, asc, desc, isNull } from "drizzle-orm";
 
 // Database connection
 const pool = new Pool({
@@ -60,6 +60,7 @@ export interface IStorage {
   // Like methods
   getAllPhotoLikes(photoId: string): Promise<PhotoLike[]>;
   addPhotoLike(photoId: string, isLiked: boolean): Promise<PhotoLike>;
+  togglePhotoLike(photoId: string, isLiked: boolean): Promise<PhotoLike>;
 
   // Comment methods
   getCommentsByPhotoId(photoId: string): Promise<Comment[]>;
@@ -181,6 +182,9 @@ export class DatabaseStorage implements IStorage {
     // Then delete all likes for this photo
     await db.delete(photoLikes).where(eq(photoLikes.photoId, id));
 
+    // Delete all notifications for this photo
+    await db.delete(notifications).where(eq(notifications.photoId, id));
+
     // Finally delete the photo itself
     const result = await db.delete(photos).where(eq(photos.id, id));
     return result.rowCount !== null && result.rowCount > 0;
@@ -205,38 +209,97 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getPhotosWithData(galleryId: string): Promise<any[]> {
+    // Get all photos for the gallery
     const galleryPhotos = await db.select().from(photos).where(eq(photos.galleryId, galleryId)).orderBy(asc(photos.createdAt));
 
-    const photosWithAllData = await Promise.all(
-      galleryPhotos.map(async (photo) => {
-        // Get likes and count
-        const photoLikesData = await db.select().from(photoLikes).where(eq(photoLikes.photoId, photo.id));
-        const likeCount = photoLikesData.filter(like => like.isLiked).length;
-        const dislikeCount = photoLikesData.filter(like => !like.isLiked).length;
+    if (galleryPhotos.length === 0) {
+      return [];
+    }
 
-        // Calculate current like status (more likes than dislikes = liked)
-        const currentLikeStatus = likeCount > dislikeCount;
+    const photoIds = galleryPhotos.map(photo => photo.id);
 
-        // Get comments
-        const photoComments = await db.select().from(comments).where(eq(comments.photoId, photo.id));
+    // Get all likes for all photos in efficient batch queries
+    let allLikes: any[] = [];
+    let allComments: any[] = [];
 
-        return {
-          ...photo,
-          src: photo.thumbnailPath ? `/${photo.thumbnailPath}` : `/${photo.filePath}`, // Always use thumbnail for gallery view
-          mediumSrc: photo.mediumPath ? `/${photo.mediumPath}` : `/${photo.filePath}`, // For lightbox
-          originalSrc: `/${photo.filePath}`, // For downloads
-          rating: photo.rating || 0,
-          isLiked: currentLikeStatus,
-          likeCount: likeCount,
-          comments: photoComments.map(comment => ({
-            id: comment.id,
-            author: comment.commenterName,
-            text: comment.text,
-            timestamp: comment.createdAt ? new Date(comment.createdAt).toLocaleString('de-DE') : 'Unbekannt'
-          }))
-        };
-      })
-    );
+    if (photoIds.length > 0) {
+      // Use raw SQL for better performance with large datasets
+      const likesQuery = `
+        SELECT * FROM photo_likes 
+        WHERE photo_id = ANY($1)
+      `;
+      const commentsQuery = `
+        SELECT * FROM comments 
+        WHERE photo_id = ANY($1)
+      `;
+
+      try {
+        // Execute both queries in parallel
+        const [likesResult, commentsResult] = await Promise.all([
+          pool.query(likesQuery, [photoIds]),
+          pool.query(commentsQuery, [photoIds])
+        ]);
+
+        allLikes = likesResult.rows.map(row => ({
+          id: row.id,
+          photoId: row.photo_id,
+          isLiked: row.is_liked,
+          createdAt: row.created_at
+        }));
+
+        allComments = commentsResult.rows.map(row => ({
+          id: row.id,
+          photoId: row.photo_id,
+          commenterName: row.commenter_name,
+          text: row.text,
+          createdAt: row.created_at
+        }));
+      } catch (error) {
+        console.error('Error fetching likes and comments:', error);
+        // Fallback to simpler approach if raw SQL fails
+        allLikes = [];
+        allComments = [];
+      }
+    }
+
+    // Group likes and comments by photoId
+    const likesByPhoto = allLikes.reduce((acc, like) => {
+      if (!acc[like.photoId]) acc[like.photoId] = [];
+      acc[like.photoId].push(like);
+      return acc;
+    }, {} as Record<string, any[]>);
+
+    const commentsByPhoto = allComments.reduce((acc, comment) => {
+      if (!acc[comment.photoId]) acc[comment.photoId] = [];
+      acc[comment.photoId].push(comment);
+      return acc;
+    }, {} as Record<string, any[]>);
+
+    // Process photos with their data
+    const photosWithAllData = galleryPhotos.map(photo => {
+      const photoLikesData = likesByPhoto[photo.id] || [];
+      const likeCount = photoLikesData.filter(like => like.isLiked).length;
+      const dislikeCount = photoLikesData.filter(like => !like.isLiked).length;
+      const currentLikeStatus = likeCount > dislikeCount;
+
+      const photoComments = commentsByPhoto[photo.id] || [];
+
+      return {
+        ...photo,
+        src: photo.thumbnailPath ? `/${photo.thumbnailPath}` : `/${photo.filePath}`,
+        mediumSrc: photo.mediumPath ? `/${photo.mediumPath}` : `/${photo.filePath}`,
+        originalSrc: `/${photo.filePath}`,
+        rating: photo.rating || 0,
+        isLiked: currentLikeStatus,
+        likeCount: likeCount,
+        comments: photoComments.map(comment => ({
+          id: comment.id,
+          author: comment.commenterName,
+          text: comment.text,
+          timestamp: comment.createdAt ? new Date(comment.createdAt).toLocaleString('de-DE') : 'Unbekannt'
+        }))
+      };
+    });
 
     return photosWithAllData;
   }
@@ -259,6 +322,26 @@ export class DatabaseStorage implements IStorage {
   }
 
   async addPhotoLike(photoId: string, isLiked: boolean): Promise<PhotoLike> {
+    const result = await db
+      .insert(photoLikes)
+      .values({
+        photoId,
+        isLiked,
+      })
+      .returning();
+    return result[0];
+  }
+
+  async togglePhotoLike(photoId: string, isLiked: boolean): Promise<PhotoLike> {
+    // Get all existing likes for this photo
+    const existingLikes = await db.select().from(photoLikes).where(eq(photoLikes.photoId, photoId));
+    
+    // If there are existing likes, delete them first to avoid duplicates
+    if (existingLikes.length > 0) {
+      await db.delete(photoLikes).where(eq(photoLikes.photoId, photoId));
+    }
+
+    // Add the new like status
     const result = await db
       .insert(photoLikes)
       .values({
@@ -301,7 +384,8 @@ export class DatabaseStorage implements IStorage {
   async getNotificationsByUserId(userId: string): Promise<Notification[]> {
     return await db.select().from(notifications)
       .where(eq(notifications.userId, userId))
-      .orderBy(asc(notifications.createdAt));
+      .orderBy(desc(notifications.createdAt))
+      .limit(50);
   }
 
   async createNotification(notification: InsertNotification): Promise<Notification> {
