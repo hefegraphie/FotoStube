@@ -1,8 +1,9 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import PhotoCard from "./PhotoCard";
-import Lightbox from "./Lightbox";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
+import { usePhotos } from "@/contexts/PhotoContext";
 
 interface Comment {
   id: string;
@@ -45,10 +46,11 @@ interface PhotoGalleryProps {
   };
   onRatingChange?: (photoId: string, rating: number) => void;
   onLikeToggle?: (photoId: string, isLiked: boolean) => void;
+  onPhotoClick?: (photo: Photo) => void;
 }
 
 export default function PhotoGallery({
-  photos: initialPhotos,
+  photos: initialPhotos, // Keep for compatibility but ignore
   selectedPhotoIds,
   onToggleSelection,
   onPhotosChange,
@@ -58,49 +60,19 @@ export default function PhotoGallery({
   galleryContext,
   onRatingChange: externalRatingChange,
   onLikeToggle: externalLikeToggle,
+  onPhotoClick,
 }: PhotoGalleryProps) {
-  const [selectedPhoto, setSelectedPhoto] = useState<Photo | null>(null);
-  const [galleryPhotos, setGalleryPhotos] = useState(initialPhotos);
+  
+  const containerRef = useRef<HTMLDivElement>(null);
+  const navigate = useNavigate();
 
+  const { photos: sharedPhotos, setPhotos, updatePhotoRating, updatePhotoLike, addPhotoComment } = usePhotos();
   const user = authContext?.user || null;
 
-  // Sync internal state when photos prop changes
-  useEffect(() => {
-    setGalleryPhotos(initialPhotos);
-  }, [initialPhotos]);
+  // Use shared photos as source of truth - ignore initialPhotos completely
+  const galleryPhotos = sharedPhotos;
 
-  // Handle URL hash changes for lightbox navigation
-  useEffect(() => {
-    const handleHashChange = () => {
-      const hash = window.location.hash;
-      if (hash.startsWith("#lightbox-")) {
-        const photoId = hash.replace("#lightbox-", "");
-        const photo = galleryPhotos.find((p) => p.id === photoId);
-        if (photo && (!selectedPhoto || selectedPhoto.id !== photoId)) {
-          // Transformation für Lightbox-Bild: immer Medium/originalSrc im src
-          const transformedPhoto = {
-            ...photo,
-            src: photo.src,
-            mediumSrc: photo.mediumSrc,
-            originalSrc: photo.originalSrc,
-            rating: photo.rating || 0,
-            isLiked: photo.isLiked || false,
-            comments: photo.comments || [],
-          };
-          setSelectedPhoto(transformedPhoto);
-        }
-      } else if (selectedPhoto) {
-        setSelectedPhoto(null);
-      }
-    };
 
-    window.addEventListener("hashchange", handleHashChange);
-    handleHashChange();
-
-    return () => {
-      window.removeEventListener("hashchange", handleHashChange);
-    };
-  }, [galleryPhotos, selectedPhoto]);
 
   // Filter photos based on filter state
   const filteredPhotos = useMemo(() => {
@@ -116,65 +88,22 @@ export default function PhotoGallery({
   }, [galleryPhotos, filters]);
 
   const handleOpenLightbox = (photo: Photo) => {
-    const transformedPhoto = {
-      ...photo,
-      src: photo.src,
-      mediumSrc: photo.mediumSrc,
-      originalSrc: photo.originalSrc,
-      rating: photo.rating || 0,
-      isLiked: photo.isLiked || false,
-      comments: photo.comments || [],
-    };
-    setSelectedPhoto(transformedPhoto);
-    window.location.hash = `#lightbox-${photo.id}`; // Update URL hash
+    // Navigate to lightbox page with current gallery path
+    const currentPath = window.location.pathname;
+    const returnPath = encodeURIComponent(currentPath);
+
+    // Extract gallery ID from galleryContext or current path
+    const galleryId = galleryContext?.currentGallery ?
+      // Try to extract gallery ID from current URL path
+      currentPath.split('/galleries/')[1]?.split('/')[0] :
+      currentPath.split('/galleries/')[1]?.split('/')[0];
+
+    if (galleryId) {
+      navigate(`/galleries/${galleryId}/photo/${photo.id}?return=${returnPath}`);
+    }
   };
 
-  const handleCloseLightbox = () => {
-    setSelectedPhoto(null);
-    window.location.hash = ""; // Remove hash from URL
-  };
 
-  const handlePrevious = () => {
-    if (!selectedPhoto) return;
-    const currentIndex = filteredPhotos.findIndex(
-      (p) => p.id === selectedPhoto.id,
-    );
-    const previousIndex =
-      currentIndex > 0 ? currentIndex - 1 : filteredPhotos.length - 1;
-    const photo = filteredPhotos[previousIndex];
-    const transformedPhoto = {
-      ...photo,
-      src: photo.src,
-      mediumSrc: photo.mediumSrc,
-      originalSrc: photo.originalSrc,
-      rating: photo.rating || 0,
-      isLiked: photo.isLiked || false,
-      comments: photo.comments || [],
-    };
-    setSelectedPhoto(transformedPhoto);
-    window.location.hash = `#lightbox-${photo.id}`;
-  };
-
-  const handleNext = () => {
-    if (!selectedPhoto) return;
-    const currentIndex = filteredPhotos.findIndex(
-      (p) => p.id === selectedPhoto.id,
-    );
-    const nextIndex =
-      currentIndex < filteredPhotos.length - 1 ? currentIndex + 1 : 0;
-    const photo = filteredPhotos[nextIndex];
-    const transformedPhoto = {
-      ...photo,
-      src: photo.src,
-      mediumSrc: photo.mediumSrc,
-      originalSrc: photo.originalSrc,
-      rating: photo.rating || 0,
-      isLiked: photo.isLiked || false,
-      comments: photo.comments || [],
-    };
-    setSelectedPhoto(transformedPhoto);
-    window.location.hash = `#lightbox-${photo.id}`;
-  };
 
   const handleToggleLike = async (photoId: string) => {
     const currentPhoto = galleryPhotos.find((p) => p.id === photoId);
@@ -188,39 +117,9 @@ export default function PhotoGallery({
     }
 
     try {
-      const response = await fetch(`/api/photos/${photoId}/like`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          isLiked: newLikeState,
-          userName: user?.name,
-        }),
-      });
-
-      if (response.ok) {
-        const result = await response.json();
-        const serverLikeStatus = result.isLiked;
-
-        setGalleryPhotos((prev) =>
-          prev.map((photo) =>
-            photo.id === photoId
-              ? { ...photo, isLiked: serverLikeStatus }
-              : photo,
-          ),
-        );
-
-        if (selectedPhoto && selectedPhoto.id === photoId) {
-          setSelectedPhoto((prev) =>
-            prev ? { ...prev, isLiked: serverLikeStatus } : null,
-          );
-        }
-        onPhotosChange?.();
-      } else {
-        const errorData = await response.json();
-        alert("Fehler beim Speichern des Likes");
-      }
+      await updatePhotoLike(photoId, newLikeState, user?.name || 'Anonymer Besucher');
     } catch (error) {
-      alert("Fehler beim Speichern des Likes");
+      console.error("Fehler beim Speichern des Likes:", error);
     }
   };
 
@@ -229,30 +128,12 @@ export default function PhotoGallery({
       externalRatingChange(photoId, rating);
       return;
     }
+
     try {
-      const response = await fetch(`/api/photos/${photoId}/rating`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          rating,
-          userName: user?.name,
-        }),
-      });
-
-      if (response.ok) {
-        setGalleryPhotos((prev) =>
-          prev.map((photo) =>
-            photo.id === photoId ? { ...photo, rating } : photo,
-          ),
-        );
-
-        if (selectedPhoto && selectedPhoto.id === photoId) {
-          setSelectedPhoto((prev) => (prev ? { ...prev, rating } : null));
-        }
-
-        onPhotosChange?.();
-      }
-    } catch (error) {}
+      await updatePhotoRating(photoId, rating, user?.name || 'Anonymer Besucher');
+    } catch (error) {
+      console.error("Fehler beim Speichern der Bewertung:", error);
+    }
   };
 
   const handleAddComment = async (
@@ -261,44 +142,8 @@ export default function PhotoGallery({
     commenterName: string = "Anonym",
   ) => {
     try {
-      const response = await fetch(`/api/photos/${photoId}/comments`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ commenterName, text: commentText }),
-      });
-
-      if (response.ok) {
-        const result = await response.json();
-
-        const newComment = {
-          id: result.commentId,
-          author: commenterName,
-          text: commentText,
-          timestamp: "gerade eben",
-        };
-
-        setGalleryPhotos((prev) =>
-          prev.map((photo) =>
-            photo.id === photoId
-              ? { ...photo, comments: [...photo.comments, newComment] }
-              : photo,
-          ),
-        );
-
-        if (selectedPhoto && selectedPhoto.id === photoId) {
-          setSelectedPhoto((prev) =>
-            prev
-              ? {
-                  ...prev,
-                  comments: [...prev.comments, newComment],
-                }
-              : null,
-          );
-        }
-        onPhotosChange?.();
-      } else {
-        alert("Fehler beim Hinzufügen des Kommentars");
-      }
+      await addPhotoComment(photoId, commentText, commenterName);
+      onPhotosChange?.();
     } catch (error) {
       alert("Fehler beim Hinzufügen des Kommentars");
     }
@@ -311,14 +156,7 @@ export default function PhotoGallery({
       });
 
       if (response.ok) {
-        setGalleryPhotos((prev) =>
-          prev.filter((photo) => photo.id !== photoId),
-        );
-
-        if (selectedPhoto && selectedPhoto.id === photoId) {
-          setSelectedPhoto(null);
-          window.location.hash = "";
-        }
+        setPhotos(sharedPhotos.filter((photo) => photo.id !== photoId));
         onPhotosChange?.();
       } else {
         alert("Fehler beim Löschen");
@@ -328,45 +166,7 @@ export default function PhotoGallery({
     }
   };
 
-  const handleBatchRating = async (rating: number) => {
-    const photoIds = Array.from(selectedPhotoIds);
-    if (photoIds.length === 0) return;
-
-    try {
-      const response = await fetch("/api/photos/batch/rating", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          photoIds,
-          rating,
-          userName: user?.name,
-        }),
-      });
-
-      if (response.ok) {
-        setGalleryPhotos((prev) =>
-          prev.map((photo) =>
-            photoIds.includes(photo.id) ? { ...photo, rating } : photo,
-          ),
-        );
-
-        if (selectedPhoto && photoIds.includes(selectedPhoto.id)) {
-          setSelectedPhoto((prev) => (prev ? { ...prev, rating } : null));
-        }
-
-        photoIds.forEach((photoId) => onToggleSelection(photoId));
-
-        onPhotosChange?.();
-        alert(
-          `${photoIds.length} Foto${photoIds.length > 1 ? "s" : ""} mit ${rating} Stern${rating > 1 ? "en" : ""} bewertet`,
-        );
-      } else {
-        alert("Fehler beim Bewerten der Fotos");
-      }
-    } catch (error) {
-      alert("Fehler beim Bewerten der Fotos");
-    }
-  };
+  
 
   const handleDeleteSelectedPhotos = async () => {
     const photoIds = Array.from(selectedPhotoIds);
@@ -382,14 +182,8 @@ export default function PhotoGallery({
       const result = await response.json();
 
       if (response.ok) {
-        setGalleryPhotos((prev) =>
-          prev.filter((photo) => !result.deleted.includes(photo.id)),
-        );
-
-        if (selectedPhoto && result.deleted.includes(selectedPhoto.id)) {
-          setSelectedPhoto(null);
-          window.location.hash = "";
-        }
+        const updatedPhotos = sharedPhotos.filter((photo) => !result.deleted.includes(photo.id));
+        setPhotos(updatedPhotos);
 
         result.deleted.forEach((photoId: string) => {
           selectedPhotoIds.delete(photoId);
@@ -410,9 +204,8 @@ export default function PhotoGallery({
         onPhotosChange?.();
       } else {
         if (result.deleted && result.deleted.length > 0) {
-          setGalleryPhotos((prev) =>
-            prev.filter((photo) => !result.deleted.includes(photo.id)),
-          );
+          const updatedPhotos = sharedPhotos.filter((photo) => !result.deleted.includes(photo.id));
+          setPhotos(updatedPhotos);
           result.deleted.forEach((photoId: string) => {
             selectedPhotoIds.delete(photoId);
           });
@@ -428,6 +221,7 @@ export default function PhotoGallery({
     <div className="space-y-6">
       {/* Gallery Grid */}
       <div
+        ref={containerRef}
         className="gallery-grid-responsive grid gap-2 sm:gap-3 md:gap-4"
         data-testid="gallery-grid"
       >
@@ -443,7 +237,7 @@ export default function PhotoGallery({
               comments: photo.comments || [],
               isSelected: selectedPhotoIds.has(photo.id),
             }}
-            onOpenLightbox={() => handleOpenLightbox(photo)}
+            onOpenLightbox={() => onPhotoClick ? onPhotoClick(photo) : handleOpenLightbox(photo)}
             onToggleLike={handleToggleLike}
             onRatingChange={handleRatingChange}
             onToggleSelection={onToggleSelection}
@@ -452,16 +246,7 @@ export default function PhotoGallery({
         ))}
       </div>
 
-      {/* Lightbox */}
-      <Lightbox
-        photo={selectedPhoto}
-        onClose={handleCloseLightbox}
-        onPrevious={handlePrevious}
-        onNext={handleNext}
-        onToggleLike={handleToggleLike}
-        onRatingChange={handleRatingChange}
-        onAddComment={handleAddComment}
-      />
+
     </div>
   );
 }
