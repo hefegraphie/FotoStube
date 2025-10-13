@@ -10,8 +10,8 @@ echo "==> System aktualisieren..."
 sudo apt update
 wait_for_continue
 
-echo "==> Git installieren..."
-sudo apt install -y git
+echo "==> Git, curl und PostgreSQL installieren..."
+sudo apt install -y git curl postgresql postgresql-contrib
 wait_for_continue
 
 # Repository URL
@@ -25,6 +25,15 @@ if ! id -u fotostube >/dev/null 2>&1; then
   echo "==> Systemuser 'fotostube' anlegen..."
   sudo useradd -r -m -d "$install_dir" -s /usr/sbin/nologin fotostube
 fi
+
+# Alte Node/Npm Versionen ggf. entfernen, um Konflikte zu vermeiden
+sudo apt remove -y nodejs npm || true
+sudo apt autoremove -y
+
+# Nodesource Setup für Node.js 20
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+sudo apt install -y nodejs
+wait_for_continue
 
 # Repository klonen oder aktualisieren
 if [ -d "$install_dir" ]; then
@@ -45,17 +54,12 @@ fi
 sudo chown -R fotostube:fotostube "$install_dir"
 wait_for_continue
 
-echo "==> Node.js und Abhängigkeiten installieren..."
-curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
-sudo apt install -y nodejs npm curl postgresql postgresql-contrib
-wait_for_continue
-
 echo "==> PostgreSQL starten und aktivieren..."
 sudo systemctl enable postgresql
 sudo systemctl start postgresql
 wait_for_continue
 
-# npm-Abhängigkeiten installieren
+# npm-Abhängigkeiten installieren (als fotostube)
 sudo -u fotostube bash -c "cd $install_dir && npm install archiver date-fns sharp"
 wait_for_continue
 
@@ -97,7 +101,7 @@ INSERT INTO users (username, email, password, name) VALUES ('$test_user', '$test
 EOF
 wait_for_continue
 
-# systemd Service erstellen
+# systemd Service erstellen (npm run dev wie im Testsystem)
 echo "==> Systemdienst für Fotostube einrichten..."
 sudo bash -c "cat <<EOF > /etc/systemd/system/fotostube.service
 [Unit]
@@ -108,9 +112,9 @@ After=network.target
 Type=simple
 User=fotostube
 WorkingDirectory=$install_dir
-ExecStart=$(which npm) run start
+ExecStart=$(which npm) run dev
 Restart=always
-Environment=NODE_ENV=production
+Environment=NODE_ENV=development
 
 [Install]
 WantedBy=multi-user.target
