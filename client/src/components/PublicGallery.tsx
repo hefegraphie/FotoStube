@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import PhotoGallery from "./PhotoGallery";
 import CollapsibleSelectionPanel from "./CollapsibleSelectionPanel";
@@ -11,7 +11,9 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Menu, Download, Calendar, Image } from "lucide-react";
 import { NotificationProvider } from "@/contexts/NotificationContext";
+import { usePhotos } from "@/contexts/PhotoContext";
 import { useToast } from "@/hooks/use-toast";
+import LoadingOverlay from "./LoadingOverlay";
 
 interface Comment {
   id: string;
@@ -54,6 +56,7 @@ interface PublicGalleryData {
 
 function PublicGalleryContent() {
   const { galleryId } = useParams<{ galleryId: string }>();
+  const navigate = useNavigate();
   const [selectedPhotoIds, setSelectedPhotoIds] = useState<Set<string>>(new Set());
   const [filters, setFilters] = useState<FilterState>({
     showOnlyLiked: false,
@@ -61,8 +64,17 @@ function PublicGalleryContent() {
     minStars: 0,
     maxStars: 5
   });
-  const [selectedPhoto, setSelectedPhoto] = useState<Photo | null>(null);
-  const [photos, setPhotos] = useState<Photo[]>([]);
+
+  // State for loading overlay during batch rating
+  const [isBatchRating, setIsBatchRating] = useState(false);
+
+  const handleRatingChange = async (photoId: string, newRating: number) => {
+    try {
+      await updatePhotoRating(photoId, newRating, 'Anonymer Besucher');
+    } catch (error) {
+      console.error('Error updating rating:', error);
+    }
+  };
   const [gallery, setGallery] = useState<PublicGalleryData['gallery'] | null>(null);
   const [currentView, setCurrentView] = useState<'main' | 'subgallery'>('main');
   const [currentSubGalleryId, setCurrentSubGalleryId] = useState<string | null>(null);
@@ -74,47 +86,7 @@ function PublicGalleryContent() {
   const { toast } = useToast();
 
 
-  const { refetch } = useQuery<PublicGalleryData>({
-    queryKey: ['/api/gallery', galleryId, 'public'],
-    enabled: !!galleryId,
-    queryFn: async () => {
-      const response = await fetch(`/api/gallery/${galleryId}/public`);
-      if (!response.ok) {
-        throw new Error('Failed to fetch public gallery');
-      }
-      const result = await response.json();
-
-      const transformedPhotos = result.photos.map((photo: any) => ({
-        id: photo.id,
-        src: `/${photo.thumbnailPath || photo.filePath}`,
-        mediumSrc: photo.mediumPath ? `/${photo.mediumPath}` : undefined,
-        originalSrc: photo.filePath ? `/${photo.filePath}` : undefined,
-        alt: photo.alt,
-        rating: photo.rating || 0,
-        isLiked: photo.isLiked || false,
-        comments: photo.comments?.map((comment: any) => ({
-          id: comment.id,
-          author: comment.commenterName || comment.author || 'Unbekannt',
-          text: comment.text,
-          timestamp: comment.createdAt ? new Date(comment.createdAt).toLocaleString('de-DE', {
-            year: 'numeric',
-            month: '2-digit',
-            day: '2-digit',
-            hour: '2-digit',
-            minute: '2-digit'
-          }) : (comment.timestamp || 'Unbekannt')
-        })) || []
-      }));
-
-      setGallery(result.gallery);
-      setPhotos(transformedPhotos);
-
-      return {
-        gallery: result.gallery,
-        photos: transformedPhotos
-      };
-    }
-  });
+  // Remove redundant query - data is now managed by PhotoContext
 
   const handleToggleSelection = (photoId: string) => {
     setSelectedPhotoIds(prev => {
@@ -129,129 +101,21 @@ function PublicGalleryContent() {
   };
 
   const handlePhotosChange = () => {
-    refetch();
+    // No need to refetch - PhotoContext manages all updates
   };
 
   const handleSelectSubGallery = async (subGalleryId: string) => {
+    setPhotos([]); // Clear photos before navigating to sub-gallery
     window.location.href = `/gallery/${subGalleryId}`;
   };
 
-  const handleRatingChange = async (photoId: string, newRating: number) => {
-    const photo = photos.find(p => p.id === photoId);
-
-    setPhotos(prev =>
-      prev.map(photo =>
-        photo.id === photoId
-          ? { ...photo, rating: newRating }
-          : photo
-      )
-    );
-
-    try {
-      await fetch(`/api/photos/${photoId}/rating`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ rating: newRating }),
-      });
-
-      if (photo && gallery?.userId) {
-        const message = `Jemand hat Bild "${photo.alt}" in Galerie "${gallery.name}" mit ${newRating} Stern${newRating !== 1 ? 'en' : ''} bewertet`;
-        console.log('Sending rating notification to gallery owner:', { ownerId: gallery.userId, message });
-
-        const notificationResponse = await fetch('/api/notifications', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            userId: gallery.userId,
-            galleryId: gallery.id,
-            photoId,
-            type: 'rating',
-            message,
-            actorName: 'Anonymer Besucher',
-            isRead: false
-          })
-        });
-
-        if (!notificationResponse.ok) {
-          const errorData = await response.text();
-          console.error('Notification failed:', errorData);
-        } else {
-          console.log('Rating notification sent successfully');
-          // Trigger a notification refresh for any authenticated users
-          window.dispatchEvent(new CustomEvent('refreshNotifications'));
-        }
-      }
-    } catch (error) {
-      console.error('Error in rating/notification:', error);
-    }
-  };
+  const { photos, setPhotos, updatePhotoLike, updatePhotoRating } = usePhotos();
 
   const handleLikeToggle = async (photoId: string, isLiked: boolean) => {
-    const photo = photos.find(p => p.id === photoId);
-    console.log(`Toggling like for photo ${photoId}:`, isLiked);
-
-    setPhotos(prev =>
-      prev.map(photo =>
-        photo.id === photoId
-          ? { ...photo, isLiked: isLiked }
-          : photo
-      )
-    );
-
     try {
-      const response = await fetch(`/api/photos/${photoId}/like`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ isLiked }),
-      });
-
-      const data = await response.json();
-      console.log('Like response:', data);
-
-      setPhotos(prev =>
-        prev.map(photo =>
-          photo.id === photoId
-            ? { ...photo, isLiked: data.isLiked }
-            : photo
-        )
-      );
-
-      if (photo && gallery?.userId) {
-        const action = data.isLiked ? 'geliked' : 'entliked';
-        const message = `Jemand hat Bild "${photo.alt}" in Galerie "${gallery.name}" ${action}`;
-        console.log('Sending like notification to gallery owner:', { ownerId: gallery.userId, message });
-
-        const notificationResponse = await fetch('/api/notifications', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            userId: gallery.userId,
-            galleryId: gallery.id,
-            photoId,
-            type: 'like',
-            message,
-            actorName: 'Anonymer Besucher',
-            isRead: false
-          })
-        });
-
-        if (!notificationResponse.ok) {
-          const errorData = await response.text();
-          console.error('Like notification failed:', errorData);
-        } else {
-          console.log('Like notification sent successfully');
-        }
-      }
+      await updatePhotoLike(photoId, isLiked, 'Anonymer Besucher');
     } catch (error) {
-      console.error('Error in like/notification:', error);
+      console.error('Error toggling like:', error);
     }
   };
 
@@ -262,13 +126,13 @@ function PublicGalleryContent() {
       // First check for this specific gallery
       let stored = localStorage.getItem(`gallery_access_${galleryId}`);
       if (stored) return stored;
-      
+
       // If we have gallery info and this is a sub-gallery, check parent gallery password
       if (gallery?.parentId) {
         stored = localStorage.getItem(`gallery_access_${gallery.parentId}`);
         if (stored) return stored;
       }
-      
+
       return null;
     } catch {
       return null;
@@ -279,7 +143,7 @@ function PublicGalleryContent() {
     try {
       // Store password for current gallery
       localStorage.setItem(`gallery_access_${galleryId}`, password);
-      
+
       // If this is a main gallery (no parentId), the password will be checked by sub-galleries
       // If this is a sub-gallery, also store the password for the parent gallery
       if (gallery?.parentId) {
@@ -308,8 +172,8 @@ function PublicGalleryContent() {
         const transformedPhotos = data.photos.map((photo: any) => ({
           id: photo.id,
           src: `/${photo.thumbnailPath || photo.filePath}`,
-          mediumSrc: photo.mediumPath ? `/${photo.mediumPath}` : undefined,
-          originalSrc: photo.filePath ? `/${photo.filePath}` : undefined,
+          mediumSrc: photo.mediumPath ? `/${photo.mediumPath}` : `/${photo.filePath}`,
+          originalSrc: `/${photo.filePath}`, // Always use filePath for original/download
           alt: photo.alt,
           rating: photo.rating || 0,
           isLiked: photo.isLiked || false,
@@ -348,6 +212,8 @@ function PublicGalleryContent() {
   useEffect(() => {
     const fetchGallery = async () => {
       setIsLoading(true);
+      setPhotos([]); // Clear photos on new gallery load
+      
       try {
         // First get gallery info to check if it's a sub-gallery
         let galleryInfo;
@@ -360,7 +226,7 @@ function PublicGalleryContent() {
         } catch (error) {
           console.error("Error fetching gallery info:", error);
         }
-        
+
         // Check for stored passwords - first for current gallery, then for parent if it's a sub-gallery
         let storedPassword = null;
         try {
@@ -371,7 +237,7 @@ function PublicGalleryContent() {
         } catch (error) {
           console.error('Error accessing localStorage:', error);
         }
-        
+
         const requestBody = storedPassword ? { password: storedPassword } : {};
         const method = storedPassword ? 'POST' : 'GET';
 
@@ -388,8 +254,8 @@ function PublicGalleryContent() {
           const transformedPhotos = data.photos.map((photo: any) => ({
             id: photo.id,
             src: `/${photo.thumbnailPath || photo.filePath}`,
-            mediumSrc: photo.mediumPath ? `/${photo.mediumPath}` : undefined,
-            originalSrc: photo.filePath ? `/${photo.filePath}` : undefined,
+            mediumSrc: photo.mediumPath ? `/${photo.mediumPath}` : `/${photo.filePath}`,
+            originalSrc: `/${photo.filePath}`,
             alt: photo.alt,
             rating: photo.rating || 0,
             isLiked: photo.isLiked || false,
@@ -409,31 +275,10 @@ function PublicGalleryContent() {
           setGallery(data.gallery);
           setPhotos(transformedPhotos);
         } else if (response.status === 403) {
-          // Gallery is password protected
           setIsPasswordProtected(true);
-          // Try to get gallery name for password dialog
-          try {
-            const infoResponse = await fetch(`/api/galleries/${galleryId}`);
-            if (infoResponse.ok) {
-              const galleryInfo = await infoResponse.json();
-              setGallery(galleryInfo);
-            }
-          } catch (error) {
-            console.error("Error fetching gallery info:", error);
-          }
         } else if (response.status === 401) {
-          // Stored password is wrong, clear it and show password dialog
           localStorage.removeItem(`gallery_access_${galleryId}`);
           setIsPasswordProtected(true);
-          try {
-            const infoResponse = await fetch(`/api/galleries/${galleryId}`);
-            if (infoResponse.ok) {
-              const galleryInfo = await infoResponse.json();
-              setGallery(galleryInfo);
-            }
-          } catch (error) {
-            console.error("Error fetching gallery info:", error);
-          }
         } else {
           setError("Gallery not found or not public");
         }
@@ -448,60 +293,22 @@ function PublicGalleryContent() {
     if (galleryId) {
       fetchGallery();
     }
-  }, [galleryId]);
+  }, [galleryId]); // Remove setPhotos from dependencies to prevent loops
 
-  useEffect(() => {
-    const handleHashChange = () => {
-      const hash = window.location.hash;
-      if (hash.startsWith('#lightbox-')) {
-        const photoId = hash.replace('#lightbox-', '');
-        const photo = photos.find(p => p.id === photoId);
-        if (photo && (!selectedPhoto || selectedPhoto.id !== photoId)) {
-          setSelectedPhoto(photo);
-        }
-      } else if (selectedPhoto) {
-        setSelectedPhoto(null);
-      }
-    };
 
-    window.addEventListener('hashchange', handleHashChange);
-    handleHashChange();
-
-    return () => {
-      window.removeEventListener('hashchange', handleHashChange);
-    };
-  }, [photos, selectedPhoto]);
 
 
   const handleOpenLightbox = (photo: Photo) => {
-    setSelectedPhoto(photo);
-    window.location.hash = `lightbox-${photo.id}`;
-  };
+    // Navigate to lightbox page with return path
+    const currentPath = window.location.pathname;
+    const returnPath = encodeURIComponent(currentPath);
 
-  const handleCloseLightbox = () => {
-    setSelectedPhoto(null);
-    if (window.location.hash.startsWith('#lightbox-')) {
-      window.history.replaceState(null, '', window.location.pathname + window.location.search);
+    if (galleryId) {
+      navigate(`/gallery/${galleryId}/photo/${photo.id}?return=${returnPath}`);
     }
   };
 
-  const handlePrevious = () => {
-    if (!selectedPhoto) return;
-    const currentIndex = photos.findIndex(p => p.id === selectedPhoto.id);
-    const previousIndex = currentIndex > 0 ? currentIndex - 1 : photos.length - 1;
-    const previousPhoto = photos[previousIndex];
-    setSelectedPhoto(previousPhoto);
-    window.location.hash = `lightbox-${previousPhoto.id}`;
-  };
 
-  const handleNext = () => {
-    if (!selectedPhoto) return;
-    const currentIndex = photos.findIndex(p => p.id === selectedPhoto.id);
-    const nextIndex = currentIndex < photos.length - 1 ? currentIndex + 1 : 0;
-    const nextPhoto = photos[nextIndex];
-    setSelectedPhoto(nextPhoto);
-    window.location.hash = `lightbox-${nextPhoto.id}`;
-  };
 
   if (isLoading) {
     return (
@@ -587,6 +394,18 @@ function PublicGalleryContent() {
 
     if (photoIds.length === 0) return;
 
+    // Show preparation indicator
+    const loadingToast = toast({
+      title: "Download wird vorbereitet",
+      description: (
+        <div className="flex items-center space-x-2">
+          <div className="animate-spin rounded-full h-4 w-4 border-2 border-blue-500 border-t-transparent"></div>
+          <span>{photoIds.length} Foto{photoIds.length !== 1 ? 's' : ''} werden vorbereitet. Dies kann einige Sekunden dauern...</span>
+        </div>
+      ),
+      duration: Infinity, // Keep the toast open until explicitly dismissed
+    });
+
     try {
       const response = await fetch('/api/photos/download', {
         method: 'POST',
@@ -605,7 +424,11 @@ function PublicGalleryContent() {
         a.href = url;
         a.download = `photos_${new Date().toISOString().split('T')[0]}.zip`;
         document.body.appendChild(a);
+
+        // Dismiss loading toast only when download dialog appears
+        loadingToast.dismiss();
         a.click();
+
         window.URL.revokeObjectURL(url);
         document.body.removeChild(a);
 
@@ -632,10 +455,11 @@ function PublicGalleryContent() {
         }
 
         toast({
-          title: "Download gestartet",
-          description: `${photoIds.length} Foto${photoIds.length !== 1 ? 's' : ''} werden heruntergeladen.`,
+          title: "Download erfolgreich",
+          description: `${photoIds.length} Foto${photoIds.length !== 1 ? 's' : ''} erfolgreich heruntergeladen.`,
         });
       } else {
+        loadingToast.dismiss();
         console.error('Failed to download photos');
         toast({
           title: "Fehler",
@@ -644,6 +468,7 @@ function PublicGalleryContent() {
         });
       }
     } catch (error) {
+      loadingToast.dismiss();
       console.error('Error downloading photos:', error);
       toast({
         title: "Fehler",
@@ -657,6 +482,18 @@ function PublicGalleryContent() {
     const allPhotoIds = photos.map(p => p.id);
 
     if (allPhotoIds.length === 0) return;
+
+    // Show preparation indicator
+    const loadingToast = toast({
+      title: "Download wird vorbereitet",
+      description: (
+        <div className="flex items-center space-x-2">
+          <div className="animate-spin rounded-full h-4 w-4 border-2 border-blue-500 border-t-transparent"></div>
+          <span>Alle {allPhotoIds.length} Fotos werden vorbereitet. Dies kann einige Sekunden dauern...</span>
+        </div>
+      ),
+      duration: Infinity, // Keep the toast open until explicitly dismissed
+    });
 
     try {
       const response = await fetch('/api/photos/download', {
@@ -676,7 +513,11 @@ function PublicGalleryContent() {
         a.href = url;
         a.download = `photos_${new Date().toISOString().split('T')[0]}.zip`;
         document.body.appendChild(a);
+
+        // Dismiss loading toast only when download dialog appears
+        loadingToast.dismiss();
         a.click();
+
         window.URL.revokeObjectURL(url);
         document.body.removeChild(a);
 
@@ -703,10 +544,11 @@ function PublicGalleryContent() {
         }
 
         toast({
-          title: "Download gestartet",
-          description: `Alle ${allPhotoIds.length} Fotos werden heruntergeladen.`,
+          title: "Download erfolgreich",
+          description: `Alle ${allPhotoIds.length} Fotos erfolgreich heruntergeladen.`,
         });
       } else {
+        loadingToast.dismiss();
         console.error('Failed to download photos');
         toast({
           title: "Fehler",
@@ -715,6 +557,7 @@ function PublicGalleryContent() {
         });
       }
     } catch (error) {
+      loadingToast.dismiss();
       console.error('Error downloading photos:', error);
       toast({
         title: "Fehler",
@@ -729,6 +572,27 @@ function PublicGalleryContent() {
 
     if (photoIds.length === 0) return;
 
+    // Show loading overlay
+    setIsBatchRating(true);
+
+    // Store original ratings for rollback
+    const originalRatings = new Map();
+    photoIds.forEach(photoId => {
+      const photo = photos.find(p => p.id === photoId);
+      if (photo) {
+        originalRatings.set(photoId, photo.rating);
+      }
+    });
+
+    // Optimistically update all photos
+    const optimisticPhotos = photos.map((photo) => {
+      if (photoIds.includes(photo.id)) {
+        return { ...photo, rating };
+      }
+      return photo;
+    });
+    setPhotos(optimisticPhotos);
+
     try {
       const response = await fetch('/api/photos/batch/rating', {
         method: 'POST',
@@ -742,13 +606,30 @@ function PublicGalleryContent() {
       });
 
       if (response.ok) {
-        setSelectedPhotoIds(new Set());
-        refetch();
+        const result = await response.json();
+        const updatedPhotos = result.photos || [];
+
+        // Update with server response to ensure consistency
+        const finalPhotos = photos.map((photo) => {
+          const updatedPhoto = updatedPhotos.find((up: any) => up.id === photo.id);
+          return updatedPhoto ? { ...photo, rating: updatedPhoto.rating } : photo;
+        });
+        setPhotos(finalPhotos);
+
+
         toast({
           title: "Bewertung erfolgreich",
           description: `${photoIds.length} Foto${photoIds.length > 1 ? 's' : ''} erfolgreich mit ${rating} Stern${rating > 1 ? 'en' : ''} bewertet`,
         });
       } else {
+        // Revert optimistic updates on error
+        const revertedPhotos = photos.map((photo) => {
+          if (originalRatings.has(photo.id)) {
+            return { ...photo, rating: originalRatings.get(photo.id) };
+          }
+          return photo;
+        });
+        setPhotos(revertedPhotos);
         const errorData = await response.json();
         console.error('Batch rating failed:', errorData);
         toast({
@@ -758,17 +639,31 @@ function PublicGalleryContent() {
         });
       }
     } catch (error) {
+      // Revert optimistic updates on error
+      const revertedPhotos = photos.map((photo) => {
+        if (originalRatings.has(photo.id)) {
+          return { ...photo, rating: originalRatings.get(photo.id) };
+        }
+        return photo;
+      });
+      setPhotos(revertedPhotos);
       console.error('Error setting batch rating:', error);
       toast({
         title: "Fehler",
         description: "Fehler beim Bewerten der ausgewählten Fotos",
         variant: "destructive",
       });
+    } finally {
+      // Hide loading overlay
+      setIsBatchRating(false);
     }
   };
 
   return (
     <div className="flex flex-col md:flex-row h-screen">
+      {/* Loading Overlay */}
+      <LoadingOverlay isVisible={isBatchRating} message="Bilder werden bewertet..." />
+
       <div className="flex-1 p-4 md:p-6 space-y-4 md:space-y-6 overflow-y-auto">
         <Card className="p-4 md:p-6">
           <div className="flex items-start justify-between">
@@ -832,6 +727,9 @@ function PublicGalleryContent() {
             currentGallery: gallery?.name || 'Unbekannte Galerie',
             parentGallery: gallery?.parentId ? 'Übergeordnete Galerie' : undefined
           }}
+          onPhotoClick={handleOpenLightbox}
+          onRatingChange={handleRatingChange}
+          onLikeToggle={handleLikeToggle}
         />
       </div>
 
@@ -847,14 +745,12 @@ function PublicGalleryContent() {
         onFiltersChange={setFilters}
         showFilters={true}
       />
+
+
     </div>
   );
 }
 
 export default function PublicGallery() {
-  return (
-    <NotificationProvider>
-      <PublicGalleryContent />
-    </NotificationProvider>
-  );
+  return <PublicGalleryContent />;
 }

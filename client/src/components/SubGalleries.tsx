@@ -24,6 +24,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
+import { usePhotos } from "@/contexts/PhotoContext";
 
 interface SubGallery {
   id: string;
@@ -56,6 +57,7 @@ export default function SubGalleries({ parentGalleryId, onSelectSubGallery, isSu
     // Not in auth context (public gallery), user remains null
   }
   const { toast } = useToast();
+  const { setPhotos } = usePhotos();
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [subGalleryName, setSubGalleryName] = useState("");
   
@@ -288,7 +290,10 @@ export default function SubGalleries({ parentGalleryId, onSelectSubGallery, isSu
           <Card
             key={subGallery.id}
             className="hover-elevate transition-all duration-200 cursor-pointer"
-            onClick={() => onSelectSubGallery(subGallery.id)}
+            onClick={() => {
+              setPhotos([]); // Clear photos before navigating to sub-gallery
+              onSelectSubGallery(subGallery.id);
+            }}
           >
             <CardContent className="p-3">
               <div className="flex items-center space-x-3">
