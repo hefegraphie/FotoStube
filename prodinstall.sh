@@ -30,7 +30,7 @@ fi
 sudo apt remove -y nodejs npm || true
 sudo apt autoremove -y
 
-# Nodesource Setup für Node.js 20
+# Nodesource Setup für Node.js 20 (npm ist enthalten)
 curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
 sudo apt install -y nodejs
 wait_for_continue
