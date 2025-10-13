@@ -28,11 +28,17 @@ fi
 
 # Repository klonen oder aktualisieren
 if [ -d "$install_dir" ]; then
-  echo "==> Repository existiert, hole neueste Änderungen..."
-  sudo git -C "$install_dir" pull
+    if [ -d "$install_dir/.git" ]; then
+        echo "==> Repository existiert, pull..."
+        sudo git -C "$install_dir" pull
+    else
+        echo "==> Existierendes Verzeichnis, aber kein Git-Repo. Backup & neu klonen..."
+        sudo mv "$install_dir" "${install_dir}_backup_$(date +%s)"
+        sudo git clone "$git_url" "$install_dir"
+    fi
 else
-  echo "==> Repository klonen..."
-  sudo git clone "$git_url" "$install_dir"
+    echo "==> Repository noch nicht geklont, klone neu..."
+    sudo git clone "$git_url" "$install_dir"
 fi
 
 # Besitzer auf den User fotostube setzen
