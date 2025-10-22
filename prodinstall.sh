@@ -52,7 +52,7 @@ sudo systemctl enable postgresql
 sudo systemctl start postgresql
 wait_for_continue
 
-sudo -u fotostube bash -c "cd $install_dir && npm install archiver date-fns sharp jsonwebtoken cookie-parser bcrypt"
+sudo -u fotostube bash -c "cd $install_dir && npm install archiver date-fns sharp jsonwebtoken cookie-parser bcrypt dotenv"
 wait_for_continue
 
 export PORT=5000
