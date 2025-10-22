@@ -45,9 +45,10 @@ interface SubGalleriesProps {
   parentGalleryId: string;
   onSelectSubGallery: (subGalleryId: string) => void;
   isSubGallery?: boolean; // If true, this is already a sub-gallery, so don't show sub-gallery creation
+  onClearSelection?: () => void;
 }
 
-export default function SubGalleries({ parentGalleryId, onSelectSubGallery, isSubGallery = false }: SubGalleriesProps) {
+export default function SubGalleries({ parentGalleryId, onSelectSubGallery, isSubGallery = false, onClearSelection }: SubGalleriesProps) {
   // Make useAuth optional for public galleries
   let user = null;
   try {
@@ -56,6 +57,9 @@ export default function SubGalleries({ parentGalleryId, onSelectSubGallery, isSu
   } catch (error) {
     // Not in auth context (public gallery), user remains null
   }
+
+  const isAdmin = user?.role === "Admin";
+
   const { toast } = useToast();
   const { setPhotos } = usePhotos();
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
@@ -207,7 +211,7 @@ export default function SubGalleries({ parentGalleryId, onSelectSubGallery, isSu
   if (subGalleries.length === 0) {
     return (
       <>
-        {user && (
+        {isAdmin && (
           <div className="mb-6">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-medium">Sub-Galerien</h3>
@@ -273,7 +277,7 @@ export default function SubGalleries({ parentGalleryId, onSelectSubGallery, isSu
     <div className="mb-6">
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-lg font-medium">Sub-Galerien ({subGalleries.length})</h3>
-        {user && (
+        {isAdmin && (
           <Button
             variant="outline"
             size="sm"
@@ -292,6 +296,7 @@ export default function SubGalleries({ parentGalleryId, onSelectSubGallery, isSu
             className="hover-elevate transition-all duration-200 cursor-pointer"
             onClick={() => {
               setPhotos([]); // Clear photos before navigating to sub-gallery
+              onClearSelection?.(); // Clear selection before navigating
               onSelectSubGallery(subGallery.id);
             }}
           >
@@ -311,7 +316,7 @@ export default function SubGalleries({ parentGalleryId, onSelectSubGallery, isSu
                     </div>
                   </div>
                 </div>
-                {user && (
+                {isAdmin && (
                   <div className="flex-shrink-0">
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
