@@ -68,12 +68,16 @@ GRANT ALL PRIVILEGES ON DATABASE fotostube TO $pg_user;
 EOF
 wait_for_continue
 
+# Starkes JWT Secret generieren
+jwt_secret=$(openssl rand -hex 32)
+
+# .env Datei anlegen mit jwt_secret
 cat <<EOF | sudo tee "$install_dir/.env" >/dev/null
 DATABASE_URL=postgresql://$pg_user:$pg_pass@localhost:5432/fotostube
 PORT=5000
+JWT_SECRET=$jwt_secret
 EOF
 sudo chown fotostube:fotostube "$install_dir/.env"
-wait_for_continue
 
 sudo -u fotostube bash -c "cd $install_dir && npm run db:push"
 wait_for_continue
