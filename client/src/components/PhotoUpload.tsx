@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { Upload, X, Plus } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface PhotoUploadProps {
   isOpen: boolean;
@@ -23,6 +24,8 @@ interface UploadFile {
 }
 
 export default function PhotoUpload({ isOpen, onClose, galleryId, onUploadComplete }: PhotoUploadProps) {
+  const { user } = useAuth();
+  const isAdmin = user?.role === "Admin";
   const [uploadFiles, setUploadFiles] = useState<UploadFile[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -84,7 +87,7 @@ export default function PhotoUpload({ isOpen, onClose, galleryId, onUploadComple
         formData.append('photos', file);
       });
       formData.append('alts', JSON.stringify(uploadFiles.map(f => f.alt)));
-
+      formData.append('userId', user?.id || '');
       // Create XMLHttpRequest to track progress
       const xhr = new XMLHttpRequest();
       
@@ -149,6 +152,7 @@ export default function PhotoUpload({ isOpen, onClose, galleryId, onUploadComple
       setUploadProgress(0);
     }
   };
+
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>

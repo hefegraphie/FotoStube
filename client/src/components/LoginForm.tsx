@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/contexts/AuthContext";
 
 export default function LoginForm() {
-  const [email, setEmail] = useState("");
+  const [name, setName] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
@@ -17,9 +17,9 @@ export default function LoginForm() {
     setError("");
 
     try {
-      const success = await login(email, password);
+      const success = await login(name, password);
       if (!success) {
-        setError("Ungültige E-Mail oder Passwort");
+        setError("Ungültiger Name oder Passwort");
       }
     } catch (err) {
       setError("Ein Fehler ist aufgetreten");
@@ -38,12 +38,12 @@ export default function LoginForm() {
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <Input
-                type="email"
-                placeholder="E-Mail"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                type="text"
+                placeholder="Name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
                 required
-                data-testid="input-email"
+                data-testid="input-name"
               />
             </div>
             <div>
