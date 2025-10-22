@@ -31,9 +31,9 @@ wait_for_continue
 
 if [ -d "$install_dir" ]; then
     if [ -d "$install_dir/.git" ]; then
-echo "==> Repository existiert, pull..."
-sudo -u fotostube git -C "$install_dir" config --global --add safe.directory "$install_dir"
-sudo -u fotostube git -C "$install_dir" pull
+        echo "==> Repository existiert, pull..."
+        sudo -u fotostube git -C "$install_dir" config --global --add safe.directory "$install_dir"
+        sudo -u fotostube git -C "$install_dir" pull
     else
         echo "==> Existierendes Verzeichnis, aber kein Git-Repo. Backup & neu klonen..."
         sudo mv "$install_dir" "${install_dir}_backup_$(date +%s)"
