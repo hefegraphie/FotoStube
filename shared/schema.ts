@@ -16,10 +16,9 @@ import { relations } from "drizzle-orm";
 
 export const users = pgTable("users", {
   id: uuid("id").defaultRandom().primaryKey(),
-  username: text("username").notNull().unique(),
-  email: text("email").notNull().unique(),
-  password: text("password").notNull(),
   name: text("name").notNull(),
+  password: text("password").notNull(),
+  role: text("role").notNull().default("User"), // "Admin" or "User"
 });
 
 export const galleries = pgTable("galleries", {
@@ -81,6 +80,23 @@ export const notifications = pgTable("notifications", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+export const galleryAssignments = pgTable("gallery_assignments", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  galleryId: uuid("gallery_id")
+    .notNull()
+    .references(() => galleries.id, { onDelete: "cascade" }),
+  userId: uuid("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const brandingSettings = pgTable("branding_settings", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  companyName: text("company_name").notNull().default("PhotoGallery"),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
 // ------------------ RELATIONS ------------------
 
 export const usersRelations = relations(users, ({ many }) => ({
@@ -123,6 +139,15 @@ export const notificationsRelations = relations(notifications, ({ one }) => ({
   photo: one(photos, { fields: [notifications.photoId], references: [photos.id] }),
 }));
 
+export const galleryAssignmentsRelations = relations(galleryAssignments, ({ one }) => ({
+  gallery: one(galleries, { fields: [galleryAssignments.galleryId], references: [galleries.id] }),
+  user: one(users, { fields: [galleryAssignments.userId], references: [users.id] }),
+}));
+
+export const brandingSettingsRelations = relations(brandingSettings, () => ({
+  // No direct relations needed for brandingSettings for now
+}));
+
 // ------------------ INSERT SCHEMAS ------------------
 
 export const insertUserSchema = createInsertSchema(users).omit({ id: true });
@@ -151,6 +176,16 @@ export const insertNotificationSchema = createInsertSchema(notifications).omit({
   createdAt: true,
 });
 
+export const insertGalleryAssignmentSchema = createInsertSchema(galleryAssignments).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertBrandingSettingsSchema = createInsertSchema(brandingSettings).omit({
+  id: true,
+  updatedAt: true,
+});
+
 // ------------------ TYPES ------------------
 
 export type InsertUser = z.infer<typeof insertUserSchema>;
@@ -170,3 +205,9 @@ export type Comment = typeof comments.$inferSelect;
 
 export type InsertNotification = z.infer<typeof insertNotificationSchema>;
 export type Notification = typeof notifications.$inferSelect;
+
+export type InsertGalleryAssignment = z.infer<typeof insertGalleryAssignmentSchema>;
+export type GalleryAssignment = typeof galleryAssignments.$inferSelect;
+
+export type InsertBrandingSettings = z.infer<typeof insertBrandingSettingsSchema>;
+export type BrandingSettings = typeof brandingSettings.$inferSelect;

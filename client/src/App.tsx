@@ -10,7 +10,7 @@ import {
 import { PhotoProvider, usePhotos } from "./contexts/PhotoContext";
 import LoginForm from "./components/LoginForm";
 import { Button } from "@/components/ui/button";
-import { LogOut, Upload, ArrowLeft, Menu, Bell } from "lucide-react";
+import { LogOut, Upload, ArrowLeft, Menu, Bell, Settings as SettingsIcon } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import LoadingOverlay from "./components/LoadingOverlay";
 
@@ -24,10 +24,14 @@ const SubGalleries = lazy(() => import("./components/SubGalleries"));
 const GalleriesOverviewComponent = lazy(
   () => import("./components/GalleriesOverview"),
 );
+const UsersOverviewComponent = lazy(
+  () => import("./components/UsersOverview"),
+);
 const ThemeToggle = lazy(() => import("./components/ThemeToggle"));
 const Breadcrumb = lazy(() => import("./components/Breadcrumb"));
 const PublicGallery = lazy(() => import("./components/PublicGallery"));
 const LightboxPage = lazy(() => import("./components/LightboxPage"));
+const Settings = lazy(() => import("./components/Settings"));
 
 interface Photo {
   id: string;
@@ -84,13 +88,16 @@ function AuthWrapper({ children }: { children: React.ReactNode }) {
 // Component for showing the galleries overview
 function GalleriesOverview() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const { addNotification } = useNotifications(); // Use addNotification
   const { setPhotos } = usePhotos(); // Get setPhotos from context
+  const [showSettings, setShowSettings] = useState(false); // State to control settings view
 
   // Clear photos when entering galleries overview
   useEffect(() => {
     setPhotos([]);
   }, [setPhotos]);
+  
   const handleSelectGallery = (galleryId: string) => {
     navigate(`/galleries/${galleryId}`);
   };
@@ -104,7 +111,16 @@ function GalleriesOverview() {
           </div>
         }
       >
-        <GalleriesOverviewComponent onSelectGallery={handleSelectGallery} />
+        {showSettings ? (
+          <Settings onBack={() => setShowSettings(false)} />
+        ) : user?.role === 'Admin' ? (
+          <GalleriesOverviewComponent
+            onSelectGallery={handleSelectGallery}
+            onOpenSettings={() => setShowSettings(true)}
+          />
+        ) : (
+          <UsersOverviewComponent />
+        )}
       </Suspense>
     </AuthWrapper>
   );
@@ -119,6 +135,8 @@ function GalleryView() {
   }>();
   const navigate = useNavigate();
   const { user, galleries } = useAuth();
+  
+
   const queryClient = useQueryClient();
   const { addNotification } = useNotifications(); // Use addNotification
   const { photos: sharedPhotos, setPhotos: setSharedPhotos } = usePhotos(); // Use context for photos
@@ -150,6 +168,9 @@ function GalleryView() {
     maxStars: 5,
   });
   const [showUploadDialog, setShowUploadDialog] = useState(false);
+  const [selectedGalleryId, setSelectedGalleryId] = useState<string | null>(
+    null,
+  );
 
   if (!galleryId) {
     navigate("/galleries");
@@ -165,8 +186,15 @@ function GalleryView() {
     queryKey: ["/api/galleries", galleryId, "photos", user?.id],
     enabled: !!galleryId && !!user?.id,
     queryFn: async () => {
+      const token = localStorage.getItem('authToken');
       const response = await fetch(
-        `/api/galleries/${galleryId}/photos?userId=${user!.id}`,
+        `/api/galleries/${galleryId}/photos`,
+        {
+          credentials: 'include',
+          headers: {
+            ...(token && { 'Authorization': `Bearer ${token}` })
+          }
+        }
       );
       if (!response.ok) {
         throw new Error("Failed to fetch photos");
@@ -287,6 +315,7 @@ function GalleryView() {
         body: JSON.stringify({
           photoIds,
           rating,
+          userName: user?.name
         }),
       });
 
@@ -388,7 +417,7 @@ function GalleryView() {
   );
 
   const handleBackToGalleries = () => {
-    navigate("/galleries");
+    setSelectedGalleryId(null); // Reset selected gallery to go back to overview
   };
 
   const handleUploadComplete = () => {
@@ -415,10 +444,13 @@ function GalleryView() {
     if (photoIds.length === 0) return;
 
     try {
-      const response = await fetch("/api/photos/batch", {
+      const token = localStorage.getItem('authToken');
+      const response = await fetch('/api/photos/batch', {
         method: "DELETE",
+        credentials: 'include',
         headers: {
           "Content-Type": "application/json",
+          ...(token && { 'Authorization': `Bearer ${token}` })
         },
         body: JSON.stringify({
           photoIds,
@@ -606,7 +638,10 @@ function GalleryView() {
 
   const getBreadcrumbItems = () => {
     const items = [
-      { label: "Gallerien", onClick: () => navigate("/galleries") },
+      { label: "Gallerien", onClick: () => {
+        handleClearSelection();
+        navigate("/galleries");
+      }},
     ];
 
     // Use currentGalleryData for current gallery, fallback to galleries array for parents
@@ -622,19 +657,24 @@ function GalleryView() {
     if (grandParentGallery) {
       items.push({
         label: grandParentGallery.name,
-        onClick: () => navigate(`/galleries/${grandParentId}`),
+        onClick: () => {
+          handleClearSelection();
+          navigate(`/galleries/${grandParentId}`);
+        },
       });
     }
 
     if (parentGallery) {
       items.push({
         label: parentGallery.name,
-        onClick: () =>
+        onClick: () => {
+          handleClearSelection();
           navigate(
             grandParentGallery
               ? `/galleries/${grandParentId}/${parentId}`
               : `/galleries/${parentId}`,
-          ),
+          );
+        },
       });
     }
 
@@ -655,6 +695,26 @@ function GalleryView() {
       currentGalleryData || galleries?.find((g) => g.id === galleryId);
     return gallery?.name || "Unbekannte Galerie";
   };
+
+  // Fetch branding settings
+  const { data: brandingData } = useQuery({
+    queryKey: ["/api/branding"],
+    queryFn: async () => {
+      const response = await fetch("/api/branding");
+      if (!response.ok) return { companyName: "PhotoGallery" };
+      return response.json();
+    },
+  });
+
+  const companyName = brandingData?.companyName || "PhotoGallery";
+
+  // Set page title based on current gallery
+  useEffect(() => {
+    const galleryName = getCurrentGalleryName();
+    if (galleryName) {
+      document.title = `${galleryName} - ${companyName}`;
+    }
+  }, [galleryId, currentGalleryData, companyName]);
 
   return (
     <AuthWrapper>
@@ -683,14 +743,18 @@ function GalleryView() {
                 <Breadcrumb items={getBreadcrumbItems()} />
               </div>
               <div className="flex items-center space-x-2">
-                <Button
-                  onClick={() => setShowUploadDialog(true)}
-                  className="btn-green"
-                  data-testid="button-upload-photos"
-                >
-                  <Upload className="w-4 h-4 mr-2" />
-                  Fotos hochladen
-                </Button>
+                {user?.role === "Admin" && (
+                  <Button
+                    onClick={() => setShowUploadDialog(true)}
+                    className="btn-green"
+                    data-testid="button-upload-photos"
+                  >
+                    <Upload className="w-4 h-4 mr-2" />
+                    Fotos hochladen
+                  </Button>
+                )}
+
+
                 {/* Selection Panel Toggle Button - Mobile only */}
                 <Button
                   variant="default"
@@ -738,6 +802,7 @@ function GalleryView() {
                 }
               }}
               isSubGallery={!!parentId || !!grandParentId}
+              onClearSelection={handleClearSelection}
             />
 
             {/* Photo Gallery */}

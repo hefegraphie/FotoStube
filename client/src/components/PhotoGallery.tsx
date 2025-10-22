@@ -62,17 +62,30 @@ export default function PhotoGallery({
   onLikeToggle: externalLikeToggle,
   onPhotoClick,
 }: PhotoGalleryProps) {
-  
   const containerRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
 
-  const { photos: sharedPhotos, setPhotos, updatePhotoRating, updatePhotoLike, addPhotoComment } = usePhotos();
-  const user = authContext?.user || null;
+  const {
+    photos: sharedPhotos,
+    setPhotos,
+    updatePhotoRating,
+    updatePhotoLike,
+    addPhotoComment,
+  } = usePhotos();
+  // Try to get auth context, but don't fail if it's not available (for public galleries)
+  let authUser = null;
+  try {
+    const auth = useAuth();
+    authUser = auth.user;
+  } catch (e) {
+    // AuthContext not available - this is fine for public galleries
+  }
 
+  const user = authContext?.user || authUser;
+  const isAdmin = user?.role === "Admin";
+  
   // Use shared photos as source of truth - ignore initialPhotos completely
   const galleryPhotos = sharedPhotos;
-
-
 
   // Filter photos based on filter state
   const filteredPhotos = useMemo(() => {
@@ -93,17 +106,17 @@ export default function PhotoGallery({
     const returnPath = encodeURIComponent(currentPath);
 
     // Extract gallery ID from galleryContext or current path
-    const galleryId = galleryContext?.currentGallery ?
-      // Try to extract gallery ID from current URL path
-      currentPath.split('/galleries/')[1]?.split('/')[0] :
-      currentPath.split('/galleries/')[1]?.split('/')[0];
+    const galleryId = galleryContext?.currentGallery
+      ? // Try to extract gallery ID from current URL path
+        currentPath.split("/galleries/")[1]?.split("/")[0]
+      : currentPath.split("/galleries/")[1]?.split("/")[0];
 
     if (galleryId) {
-      navigate(`/galleries/${galleryId}/photo/${photo.id}?return=${returnPath}`);
+      navigate(
+        `/galleries/${galleryId}/photo/${photo.id}?return=${returnPath}`,
+      );
     }
   };
-
-
 
   const handleToggleLike = async (photoId: string) => {
     const currentPhoto = galleryPhotos.find((p) => p.id === photoId);
@@ -117,7 +130,11 @@ export default function PhotoGallery({
     }
 
     try {
-      await updatePhotoLike(photoId, newLikeState, user?.name || 'Anonymer Besucher');
+      await updatePhotoLike(
+        photoId,
+        newLikeState,
+        user?.name || "Anonymer Besucher",
+      );
     } catch (error) {
       console.error("Fehler beim Speichern des Likes:", error);
     }
@@ -130,7 +147,11 @@ export default function PhotoGallery({
     }
 
     try {
-      await updatePhotoRating(photoId, rating, user?.name || 'Anonymer Besucher');
+      await updatePhotoRating(
+        photoId,
+        rating,
+        user?.name || "Anonymer Besucher",
+      );
     } catch (error) {
       console.error("Fehler beim Speichern der Bewertung:", error);
     }
@@ -151,7 +172,7 @@ export default function PhotoGallery({
 
   const handleDeletePhoto = async (photoId: string) => {
     try {
-      const response = await fetch(`/api/photos/${photoId}`, {
+        const response = await fetch(`/api/photos/${photoId}?userId=${user?.id || ''}`, {
         method: "DELETE",
       });
 
@@ -166,56 +187,9 @@ export default function PhotoGallery({
     }
   };
 
-  
+ 
 
-  const handleDeleteSelectedPhotos = async () => {
-    const photoIds = Array.from(selectedPhotoIds);
-    if (photoIds.length === 0) return;
-
-    try {
-      const response = await fetch("/api/photos/batch", {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ photoIds }),
-      });
-
-      const result = await response.json();
-
-      if (response.ok) {
-        const updatedPhotos = sharedPhotos.filter((photo) => !result.deleted.includes(photo.id));
-        setPhotos(updatedPhotos);
-
-        result.deleted.forEach((photoId: string) => {
-          selectedPhotoIds.delete(photoId);
-        });
-
-        if (result.errors && result.errors.length > 0) {
-          alert(
-            `${result.success} Foto(s) gelöscht, ${result.failed} fehlgeschlagen`,
-          );
-        } else {
-          alert(`${result.success} Foto(s) erfolgreich gelöscht`);
-        }
-
-        result.deleted.forEach((photoId: string) => {
-          onToggleSelection(photoId);
-        });
-
-        onPhotosChange?.();
-      } else {
-        if (result.deleted && result.deleted.length > 0) {
-          const updatedPhotos = sharedPhotos.filter((photo) => !result.deleted.includes(photo.id));
-          setPhotos(updatedPhotos);
-          result.deleted.forEach((photoId: string) => {
-            selectedPhotoIds.delete(photoId);
-          });
-        }
-        alert(`Fehler beim Löschen: ${result.error || "Unbekannter Fehler"}`);
-      }
-    } catch (error) {
-      alert("Fehler beim Löschen der ausgewählten Fotos");
-    }
-  };
+  const showDeleteButton = !isPublicView && isAdmin;
 
   return (
     <div className="space-y-6">
@@ -237,16 +211,16 @@ export default function PhotoGallery({
               comments: photo.comments || [],
               isSelected: selectedPhotoIds.has(photo.id),
             }}
-            onOpenLightbox={() => onPhotoClick ? onPhotoClick(photo) : handleOpenLightbox(photo)}
+            onOpenLightbox={() =>
+              onPhotoClick ? onPhotoClick(photo) : handleOpenLightbox(photo)
+            }
             onToggleLike={handleToggleLike}
             onRatingChange={handleRatingChange}
             onToggleSelection={onToggleSelection}
-            onDelete={isPublicView ? undefined : handleDeletePhoto}
+            onDelete={showDeleteButton ? handleDeletePhoto : undefined}
           />
         ))}
       </div>
-
-
     </div>
   );
 }

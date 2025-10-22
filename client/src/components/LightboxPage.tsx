@@ -9,7 +9,7 @@ import {
   Heart,
   Download,
   MessageCircle,
-  ArrowLeft
+  ArrowLeft,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -44,7 +44,10 @@ interface Photo {
 }
 
 export default function LightboxPage() {
-  const { galleryId, photoId } = useParams<{ galleryId: string; photoId: string }>();
+  const { galleryId, photoId } = useParams<{
+    galleryId: string;
+    photoId: string;
+  }>();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const isMobile = useIsMobile();
@@ -54,7 +57,7 @@ export default function LightboxPage() {
   const queryClient = useQueryClient();
 
   // Check if this is a public gallery (path starts with /gallery/ instead of /galleries/)
-  const isPublicGallery = window.location.pathname.includes('/gallery/');
+  const isPublicGallery = window.location.pathname.includes("/gallery/");
 
   // Auth optional for public galleries
   let user = null;
@@ -64,13 +67,24 @@ export default function LightboxPage() {
   } catch (error) {}
 
   // Get return path from search params
-  const returnPath = searchParams.get('return') || (isPublicGallery ? `/gallery/${galleryId}` : `/galleries/${galleryId}`);
+  const returnPath =
+    searchParams.get("return") ||
+    (isPublicGallery ? `/gallery/${galleryId}` : `/galleries/${galleryId}`);
 
   // Always use PhotoContext for consistency - both private and public galleries
-  const { photos: contextPhotos, setPhotos, updatePhotoRating, updatePhotoLike, addPhotoComment, getPhoto } = usePhotos();
+  const {
+    photos: contextPhotos,
+    setPhotos,
+    updatePhotoRating,
+    updatePhotoLike,
+    addPhotoComment,
+    getPhoto,
+  } = usePhotos();
 
   // If context is empty (e.g., direct page load via F5), fetch photos
-  const [isLoadingPhotos, setIsLoadingPhotos] = useState(contextPhotos.length === 0);
+  const [isLoadingPhotos, setIsLoadingPhotos] = useState(
+    contextPhotos.length === 0,
+  );
 
   useEffect(() => {
     const loadPhotos = async () => {
@@ -89,54 +103,65 @@ export default function LightboxPage() {
           // For public galleries, check for stored password
           let storedPassword = null;
           try {
-            storedPassword = localStorage.getItem(`gallery_access_${galleryId}`);
+            storedPassword = localStorage.getItem(
+              `gallery_access_${galleryId}`,
+            );
           } catch (error) {
-            console.error('Error accessing localStorage:', error);
+            console.error("Error accessing localStorage:", error);
           }
 
-          const requestBody = storedPassword ? { password: storedPassword } : {};
-          const method = storedPassword ? 'POST' : 'GET';
+          const requestBody = storedPassword
+            ? { password: storedPassword }
+            : {};
+          const method = storedPassword ? "POST" : "GET";
 
           response = await fetch(`/api/gallery/${galleryId}/public`, {
             method,
-            headers: { 'Content-Type': 'application/json' },
-            body: method === 'POST' ? JSON.stringify(requestBody) : undefined,
+            headers: { "Content-Type": "application/json" },
+            body: method === "POST" ? JSON.stringify(requestBody) : undefined,
           });
         } else {
           // For private galleries
-          response = await fetch(`/api/galleries/${galleryId}/photos?userId=${user?.id}`);
+          response = await fetch(
+            `/api/galleries/${galleryId}/photos?userId=${user?.id}`,
+          );
         }
 
         if (response.ok) {
           const data = await response.json();
           const photosData = isPublicGallery ? data.photos : data;
-          
+
           const transformedPhotos = photosData.map((photo: any) => ({
             id: photo.id,
             src: `/${photo.thumbnailPath || photo.filePath}`,
-            mediumSrc: photo.mediumPath ? `/${photo.mediumPath}` : `/${photo.filePath}`,
+            mediumSrc: photo.mediumPath
+              ? `/${photo.mediumPath}`
+              : `/${photo.filePath}`,
             originalSrc: `/${photo.filePath}`,
             alt: photo.alt,
             rating: photo.rating || 0,
             isLiked: photo.isLiked || false,
-            comments: photo.comments?.map((comment: any) => ({
-              id: comment.id,
-              author: comment.commenterName || comment.author || 'Unbekannt',
-              text: comment.text,
-              timestamp: comment.createdAt ? new Date(comment.createdAt).toLocaleString('de-DE', {
-                year: 'numeric',
-                month: '2-digit',
-                day: '2-digit',
-                hour: '2-digit',
-                minute: '2-digit'
-              }) : (comment.timestamp || 'Unbekannt')
-            })) || []
+            comments:
+              photo.comments?.map((comment: any) => ({
+                id: comment.id,
+                author: comment.commenterName || comment.author || "Unbekannt",
+                text: comment.text,
+                timestamp: comment.createdAt
+                  ? new Date(comment.createdAt).toLocaleString("de-DE", {
+                      year: "numeric",
+                      month: "2-digit",
+                      day: "2-digit",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })
+                  : comment.timestamp || "Unbekannt",
+              })) || [],
           }));
 
           setPhotos(transformedPhotos);
         }
       } catch (error) {
-        console.error('Error loading photos for lightbox:', error);
+        console.error("Error loading photos for lightbox:", error);
       } finally {
         setIsLoadingPhotos(false);
       }
@@ -147,8 +172,8 @@ export default function LightboxPage() {
 
   // Use photos from PhotoContext for all galleries
   const photos = contextPhotos;
-  const currentPhoto = getPhoto(photoId || '');
-  const currentIndex = photos.findIndex(p => p.id === photoId);
+  const currentPhoto = getPhoto(photoId || "");
+  const currentIndex = photos.findIndex((p) => p.id === photoId);
 
   // Preload adjacent images
   useEffect(() => {
@@ -179,7 +204,9 @@ export default function LightboxPage() {
       const lightboxPath = isPublicGallery
         ? `/gallery/${galleryId}/photo/${newPhotoId}`
         : `/galleries/${galleryId}/photo/${newPhotoId}`;
-      navigate(`${lightboxPath}?return=${encodeURIComponent(returnPath)}`, { replace: true });
+      navigate(`${lightboxPath}?return=${encodeURIComponent(returnPath)}`, {
+        replace: true,
+      });
     }
   };
 
@@ -210,10 +237,14 @@ export default function LightboxPage() {
     const newLikeState = !currentPhoto.isLiked;
 
     try {
-      await updatePhotoLike(currentPhoto.id, newLikeState, user?.name || 'Anonymer Besucher');
+      await updatePhotoLike(
+        currentPhoto.id,
+        newLikeState,
+        user?.name || "Anonymer Besucher",
+      );
       // No refetch needed - PhotoContext handles optimistic updates
     } catch (error) {
-      console.error('Error toggling like:', error);
+      console.error("Error toggling like:", error);
     }
   };
 
@@ -221,10 +252,14 @@ export default function LightboxPage() {
     if (!currentPhoto) return;
 
     try {
-      await updatePhotoRating(currentPhoto.id, newRating, user?.name || 'Anonymer Besucher');
+      await updatePhotoRating(
+        currentPhoto.id,
+        newRating,
+        user?.name || "Anonymer Besucher",
+      );
       // No refetch needed - PhotoContext handles optimistic updates
     } catch (error) {
-      console.error('Error updating rating:', error);
+      console.error("Error updating rating:", error);
     }
   };
 
@@ -260,7 +295,9 @@ export default function LightboxPage() {
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      const fileName = currentPhoto.alt.replace(/[^a-z0-9]/gi, "_").toLowerCase() || currentPhoto.id;
+      const fileName =
+        currentPhoto.alt.replace(/[^a-z0-9]/gi, "_").toLowerCase() ||
+        currentPhoto.id;
       const extension = downloadSrc.split(".").pop() || "jpg";
       a.download = `${fileName}.${extension}`;
       document.body.appendChild(a);
@@ -300,6 +337,23 @@ export default function LightboxPage() {
   // Swipe handling for mobile
   const [touchStartX, setTouchStartX] = useState(0);
 
+  // Fetch branding settings
+  const { data: brandingData } = useQuery({
+    queryKey: ["/api/branding"],
+    queryFn: async () => {
+      const response = await fetch("/api/branding");
+      if (!response.ok) return { companyName: "PhotoGallery" };
+      return response.json();
+    },
+  });
+
+  const companyName = brandingData?.companyName || "PhotoGallery";
+
+  // Set page title
+  useEffect(() => {
+    document.title = `Fotoansicht - ${companyName}`;
+  }, [companyName]);
+
   const handleTouchStart = (e: React.TouchEvent) => {
     if (!isMobile) return;
     setTouchStartX(e.touches[0].clientX);
@@ -324,11 +378,7 @@ export default function LightboxPage() {
         <div className="text-center">
           <div className="animate-spin rounded-full h-8 w-8 border-2 border-primary border-t-transparent mx-auto mb-4"></div>
           <p className="text-muted-foreground">Foto wird geladen...</p>
-          <Button
-            variant="outline"
-            onClick={handleClose}
-            className="mt-4"
-          >
+          <Button variant="outline" onClick={handleClose} className="mt-4">
             <ArrowLeft className="w-4 h-4 mr-2" />
             Zurück zur Galerie
           </Button>
@@ -341,13 +391,17 @@ export default function LightboxPage() {
     <div className="min-h-screen bg-background">
       {/* Header */}
       <div className="fixed top-0 left-0 right-0 z-50 bg-background/95 backdrop-blur-sm border-b p-4 flex items-center justify-between">
-        <Button variant="ghost" onClick={handleClose} className="flex items-center">
+        <Button
+          variant="ghost"
+          onClick={handleClose}
+          className="flex items-center"
+        >
           <ArrowLeft className="w-4 h-4 mr-2" />
           Zurück zur Galerie
         </Button>
 
         <div className="text-sm text-muted-foreground">
-          {currentIndex >= 0 ? currentIndex + 1 : '?'} von {photos.length}
+          {currentIndex >= 0 ? currentIndex + 1 : "?"} von {photos.length}
         </div>
 
         {isMobile ? (
@@ -450,9 +504,11 @@ export default function LightboxPage() {
         )}
       </div>
 
-      <div className={`flex h-screen ${isMobile ? 'pt-16' : 'pt-20'}`}>
+      <div className={`flex h-screen ${isMobile ? "pt-16" : "pt-20"}`}>
         {/* Photo Area */}
-        <div className={`flex-1 flex items-center justify-center min-h-0 ${isMobile ? 'p-0 pb-20' : 'p-4'}`}>
+        <div
+          className={`flex-1 flex items-center justify-center min-h-0 ${isMobile ? "p-0 pb-20" : "p-4"}`}
+        >
           {!isMobile && (
             <Button
               variant="ghost"
@@ -468,8 +524,10 @@ export default function LightboxPage() {
             onTouchStart={handleTouchStart}
             onTouchEnd={handleTouchEnd}
             style={{
-              maxWidth: isMobile ? '100vw' : 'calc(100vw - 8rem)',
-              maxHeight: isMobile ? 'calc(100vh - 9rem)' : 'calc(100vh - 10rem)'
+              maxWidth: isMobile ? "100vw" : "calc(100vw - 8rem)",
+              maxHeight: isMobile
+                ? "calc(100vh - 9rem)"
+                : "calc(100vh - 10rem)",
             }}
           >
             <img
@@ -477,9 +535,9 @@ export default function LightboxPage() {
               alt={currentPhoto.alt}
               className="max-w-full max-h-full object-contain"
               style={{
-                width: 'auto',
-                height: 'auto',
-                aspectRatio: 'auto'
+                width: "auto",
+                height: "auto",
+                aspectRatio: "auto",
               }}
               loading="eager"
               decoding="async"
@@ -507,10 +565,7 @@ export default function LightboxPage() {
               <h4 className="font-medium mb-2">Bewertung</h4>
               <div className="flex items-center space-x-1 mb-2">
                 {[1, 2, 3, 4, 5].map((star) => (
-                  <button
-                    key={star}
-                    onClick={() => handleRatingChange(star)}
-                  >
+                  <button key={star} onClick={() => handleRatingChange(star)}>
                     <Star
                       className={`w-5 h-5 ${star <= currentPhoto.rating ? "fill-yellow-400 text-yellow-400" : "text-muted-foreground"}`}
                     />
@@ -523,11 +578,7 @@ export default function LightboxPage() {
             </div>
 
             {/* Like Button */}
-            <Button
-              variant="ghost"
-              onClick={handleLikeToggle}
-              className="mb-4"
-            >
+            <Button variant="ghost" onClick={handleLikeToggle} className="mb-4">
               <Heart
                 className={`w-5 h-5 ${currentPhoto.isLiked ? "fill-red-500 text-red-500" : "text-muted-foreground"}`}
               />
@@ -597,21 +648,14 @@ export default function LightboxPage() {
           </Button>
           <div className="flex items-center space-x-1">
             {[1, 2, 3, 4, 5].map((star) => (
-              <button
-                key={star}
-                onClick={() => handleRatingChange(star)}
-              >
+              <button key={star} onClick={() => handleRatingChange(star)}>
                 <Star
                   className={`w-5 h-5 ${star <= currentPhoto.rating ? "fill-yellow-400 text-yellow-400" : "text-muted-foreground"}`}
                 />
               </button>
             ))}
           </div>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={handleLikeToggle}
-          >
+          <Button variant="ghost" size="icon" onClick={handleLikeToggle}>
             <Heart
               className={`w-5 h-5 ${currentPhoto.isLiked ? "fill-red-500 text-red-500" : "text-muted-foreground"}`}
             />

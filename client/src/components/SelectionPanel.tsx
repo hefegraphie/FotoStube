@@ -58,6 +58,8 @@ export default function SelectionPanel({
   } catch (error) {
     // Not in auth context (public gallery), user remains null
   }
+
+  const isAdmin = user?.role === "Admin";
   
   const copyToClipboard = () => {
     const filenames = selectedPhotos.map(photo => photo.alt).join(' ');
@@ -368,7 +370,7 @@ export default function SelectionPanel({
                 </DialogContent>
               </Dialog>
             )}
-            {onDeleteSelected && (
+            {onDeleteSelected && isAdmin && (
               <Button
                 variant="destructive"
                 className="w-full"
