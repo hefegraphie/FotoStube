@@ -84,7 +84,8 @@ read -sp "Geben Sie das Passwort für den Admin ein: " admin_pass
 echo
 
 # Passwort in Node.js mit bcrypt hashen
-hashed_pass=$(node -e "const bcrypt = require('bcrypt'); bcrypt.hash(process.argv[1], 10).then(h => console.log(h));" "$admin_pass")
+hashed_pass=$(sudo -u fotostube bash -c "cd $install_dir && node -e \"const bcrypt = require('bcrypt'); bcrypt.hash(process.argv[1], 10).then(h => console.log(h));\" \"$admin_pass\"")
+
 
 # In DB einfügen
 psql postgresql://$pg_user:$pg_pass@localhost:5432/fotostube <<EOF
