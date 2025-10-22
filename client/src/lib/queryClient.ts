@@ -10,17 +10,36 @@ async function throwIfResNotOk(res: Response) {
 export async function apiRequest(
   method: string,
   url: string,
-  data?: unknown | undefined,
-): Promise<Response> {
-  const res = await fetch(url, {
-    method,
-    headers: data ? { "Content-Type": "application/json" } : {},
-    body: data ? JSON.stringify(data) : undefined,
-    credentials: "include",
-  });
+  data?: any
+): Promise<any> {
+  const token = localStorage.getItem('authToken');
 
-  await throwIfResNotOk(res);
-  return res;
+  const options: RequestInit = {
+    method,
+    headers: {
+      "Content-Type": "application/json",
+      ...(token && { "Authorization": `Bearer ${token}` })
+    },
+    credentials: 'include', // Include cookies for HTTP-only token
+  };
+
+  if (data) {
+    options.body = JSON.stringify(data);
+  }
+
+  const response = await fetch(url, options);
+
+  if (!response.ok) {
+    // Bei 401 Unauthorized -> Auto-Logout
+    if (response.status === 401) {
+      localStorage.removeItem('user');
+      localStorage.removeItem('authToken');
+      window.location.href = '/';
+    }
+    throw new Error(`API request failed: ${response.statusText}`);
+  }
+
+  return response.json();
 }
 
 type UnauthorizedBehavior = "returnNull" | "throw";
