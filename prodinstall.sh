@@ -83,10 +83,13 @@ read -p "Geben Sie den Namen für den Admin ein: " admin_name
 read -sp "Geben Sie das Passwort für den Admin ein: " admin_pass
 echo
 
+# Passwort in Node.js mit bcrypt hashen
+hashed_pass=$(node -e "const bcrypt = require('bcrypt'); bcrypt.hash(process.argv[1], 10).then(h => console.log(h));" "$admin_pass")
+
+# In DB einfügen
 psql postgresql://$pg_user:$pg_pass@localhost:5432/fotostube <<EOF
-INSERT INTO users (name, password, role) VALUES ('$admin_name', '$admin_pass', 'Admin');
+INSERT INTO users (name, password, role) VALUES ('$admin_name', '$hashed_pass', 'Admin');
 EOF
-wait_for_continue
 
 echo "==> Systemdienst für Fotostube einrichten..."
 sudo bash -c "cat <<EOF > /etc/systemd/system/fotostube.service
