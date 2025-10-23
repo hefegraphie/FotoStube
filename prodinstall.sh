@@ -100,9 +100,11 @@ EOF
 sudo chown -R fotostube:fotostube "$install_dir"
 
 echo "==> Abhängigkeiten installieren (Production, ohne dev)..."
+cd "$install_dir"
 sudo -u fotostube npm install --omit=dev
 
 echo "==> Build-Prozess starten..."
+cd "$install_dir"
 sudo -u fotostube npm run build
 
 echo "==> .env mit Production-Umgebung anlegen..."
