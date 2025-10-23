@@ -96,19 +96,17 @@ psql postgresql://$pg_user:$pg_pass@localhost:5432/fotostube <<EOF
 INSERT INTO users (name, password, role) VALUES ('$admin_name', '$hashed_pass', 'Admin');
 EOF
 
-# Besitzer auf den User fotostube setzen
+# Besitzer und Rechte sicherstellen
 sudo chown -R fotostube:fotostube "$install_dir"
-wait_for_continue
 
-echo "==> Abhängigkeiten für Produktion installieren (ohne dev)..."
-sudo -u fotostube npm ci --omit=dev
-wait_for_continue
+echo "==> Abhängigkeiten installieren (Production, ohne dev)..."
+sudo -u fotostube npm install --omit=dev
 
-echo "==> Build starten..."
+echo "==> Build-Prozess starten..."
 sudo -u fotostube npm run build
-wait_for_continue
 
-# .env mit production Environment
+echo "==> .env mit Production-Umgebung anlegen..."
+jwt_secret=$(openssl rand -hex 32)
 cat <<EOF | sudo tee "$install_dir/.env" >/dev/null
 DATABASE_URL=postgresql://$pg_user:$pg_pass@localhost:5432/fotostube
 PORT=5000
@@ -116,12 +114,11 @@ JWT_SECRET=$jwt_secret
 NODE_ENV=production
 EOF
 sudo chown fotostube:fotostube "$install_dir/.env"
-wait_for_continue
 
-echo "==> Systemdienst für Fotostube als Production-Service einrichten..."
+echo "==> Systemdienst für Production setzen..."
 sudo bash -c "cat <<EOF > /etc/systemd/system/fotostube.service
 [Unit]
-Description=Fotostube
+Description=Fotostube Production
 After=network.target
 
 [Service]
@@ -142,5 +139,6 @@ sudo systemctl enable fotostube.service
 sudo systemctl restart fotostube.service
 
 echo "✅ Production Setup abgeschlossen!"
-echo "Fotostube läuft jetzt als Systemdienst im Production-Modus."
-echo "Logs ansehen: sudo journalctl -u fotostube.service -f"
+echo "Fotostube läuft als Systemdienst im Production-Modus."
+echo "Logs ansehen:         sudo journalctl -u fotostube.service -f"
+echo "Service-Status:       sudo systemctl status fotostube.service"
