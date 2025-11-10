@@ -1,4 +1,4 @@
-import dotenv from 'dotenv';
+import dotenv from "dotenv";
 dotenv.config();
 import {
   type User,
@@ -20,7 +20,7 @@ import {
   comments,
   notifications,
   galleryAssignments,
-  brandingSettings
+  brandingSettings,
 } from "@shared/schema";
 import pg from "pg";
 const { Pool } = pg;
@@ -55,7 +55,10 @@ export interface IStorage {
   getSubGalleriesByParentId(parentId: string): Promise<Gallery[]>;
   getGallery(id: string): Promise<Gallery | undefined>;
   createGallery(gallery: InsertGallery): Promise<Gallery>;
-  updateGallery(id: string, updates: Partial<InsertGallery>): Promise<Gallery | undefined>;
+  updateGallery(
+    id: string,
+    updates: Partial<InsertGallery>,
+  ): Promise<Gallery | undefined>;
   deleteGallery(id: string): Promise<boolean>;
 
   // Photo methods
@@ -79,7 +82,11 @@ export interface IStorage {
   getCommentsByPhotoId(photoId: string): Promise<Comment[]>;
   createComment(comment: InsertComment): Promise<Comment>;
   deleteComment(id: string): Promise<boolean>;
-  addComment(photoId: string, commenterName: string, text: string): Promise<string>;
+  addComment(
+    photoId: string,
+    commenterName: string,
+    text: string,
+  ): Promise<string>;
 
   // Notification methods
   getNotificationsByUserId(userId: string): Promise<Notification[]>;
@@ -101,12 +108,20 @@ export class DatabaseStorage implements IStorage {
 
   // User methods
   async getUser(id: string): Promise<User | undefined> {
-    const result = await this.db.select().from(users).where(eq(users.id, id)).limit(1);
+    const result = await this.db
+      .select()
+      .from(users)
+      .where(eq(users.id, id))
+      .limit(1);
     return result[0];
   }
 
   async getUserByName(name: string): Promise<User | undefined> {
-    const result = await this.db.select().from(users).where(eq(users.name, name)).limit(1);
+    const result = await this.db
+      .select()
+      .from(users)
+      .where(eq(users.name, name))
+      .limit(1);
     return result[0];
   }
 
@@ -115,8 +130,12 @@ export class DatabaseStorage implements IStorage {
     return result[0];
   }
 
-  async updateUserPassword(userId: string, hashedPassword: string): Promise<boolean> {
-    const result = await this.db.update(users)
+  async updateUserPassword(
+    userId: string,
+    hashedPassword: string,
+  ): Promise<boolean> {
+    const result = await this.db
+      .update(users)
       .set({ password: hashedPassword })
       .where(eq(users.id, userId));
     return result.rowCount !== null && result.rowCount > 0;
@@ -134,39 +153,46 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateUser(userId: string, updates: Partial<User>): Promise<void> {
-    await this.db
-      .update(users)
-      .set(updates)
-      .where(eq(users.id, userId));
+    await this.db.update(users).set(updates).where(eq(users.id, userId));
   }
 
   async deleteUser(userId: string): Promise<void> {
-    // Delete gallery assignments first (cascade should handle this, but being explicit)
-    await this.db
-      .delete(galleryAssignments)
-      .where(eq(galleryAssignments.userId, userId));
-
-    // Delete user
-    await this.db
-      .delete(users)
-      .where(eq(users.id, userId));
+    // Delete user - cascade deletes will automatically handle:
+    // - notifications (user_id reference)
+    // - galleries (user_id reference)
+    // - gallery_assignments (user_id reference)
+    await this.db.delete(users).where(eq(users.id, userId));
   }
 
   // Gallery methods
   async getGalleriesByUserId(userId: string): Promise<Gallery[]> {
-    return await this.db.select().from(galleries).where(eq(galleries.userId, userId));
+    return await this.db
+      .select()
+      .from(galleries)
+      .where(eq(galleries.userId, userId));
   }
 
   async getMainGalleriesByUserId(userId: string): Promise<Gallery[]> {
-    return await this.db.select().from(galleries).where(and(eq(galleries.userId, userId), isNull(galleries.parentId)));
+    return await this.db
+      .select()
+      .from(galleries)
+      .where(and(eq(galleries.userId, userId), isNull(galleries.parentId)));
   }
 
   async getSubGalleriesByParentId(parentId: string): Promise<Gallery[]> {
-    return await this.db.select().from(galleries).where(eq(galleries.parentId, parentId)).orderBy(asc(galleries.createdAt));
+    return await this.db
+      .select()
+      .from(galleries)
+      .where(eq(galleries.parentId, parentId))
+      .orderBy(asc(galleries.createdAt));
   }
 
   async getGallery(id: string): Promise<Gallery | undefined> {
-    const result = await this.db.select().from(galleries).where(eq(galleries.id, id)).limit(1);
+    const result = await this.db
+      .select()
+      .from(galleries)
+      .where(eq(galleries.id, id))
+      .limit(1);
     return result[0];
   }
 
@@ -175,53 +201,82 @@ export class DatabaseStorage implements IStorage {
     return result[0];
   }
 
-  async updateGallery(id: string, updates: Partial<InsertGallery>): Promise<Gallery | undefined> {
-    const result = await this.db.update(galleries).set(updates).where(eq(galleries.id, id)).returning();
+  async updateGallery(
+    id: string,
+    updates: Partial<InsertGallery>,
+  ): Promise<Gallery | undefined> {
+    const result = await this.db
+      .update(galleries)
+      .set(updates)
+      .where(eq(galleries.id, id))
+      .returning();
     return result[0];
   }
 
   async deleteGallery(id: string): Promise<boolean> {
     try {
       // First get all sub-galleries and delete them recursively
-      const subGalleries = await this.db.select().from(galleries).where(eq(galleries.parentId, id));
+      const subGalleries = await this.db
+        .select()
+        .from(galleries)
+        .where(eq(galleries.parentId, id));
       for (const subGallery of subGalleries) {
         await this.deleteGallery(subGallery.id); // Recursive deletion
       }
 
       // Then get all photos in the gallery
-      const galleryPhotos = await this.db.select().from(photos).where(eq(photos.galleryId, id));
+      const galleryPhotos = await this.db
+        .select()
+        .from(photos)
+        .where(eq(photos.galleryId, id));
 
       // Delete all photos and their dependencies
       for (const photo of galleryPhotos) {
         // Delete comments for this photo
         await this.db.delete(comments).where(eq(comments.photoId, photo.id));
         // Delete likes for this photo
-        await this.db.delete(photoLikes).where(eq(photoLikes.photoId, photo.id));
+        await this.db
+          .delete(photoLikes)
+          .where(eq(photoLikes.photoId, photo.id));
         // Delete notifications for this photo
-        await this.db.delete(notifications).where(eq(notifications.photoId, photo.id));
+        await this.db
+          .delete(notifications)
+          .where(eq(notifications.photoId, photo.id));
         // Delete the photo itself
         await this.db.delete(photos).where(eq(photos.id, photo.id));
       }
 
       // Delete notifications for this gallery
-      await this.db.delete(notifications).where(eq(notifications.galleryId, id));
+      await this.db
+        .delete(notifications)
+        .where(eq(notifications.galleryId, id));
 
       // Finally delete the gallery
-      const result = await this.db.delete(galleries).where(eq(galleries.id, id));
+      const result = await this.db
+        .delete(galleries)
+        .where(eq(galleries.id, id));
       return result.rowCount !== null && result.rowCount > 0;
     } catch (error) {
-      console.error('Error deleting gallery:', error);
+      console.error("Error deleting gallery:", error);
       return false;
     }
   }
 
   // Photo methods
   async getPhotosByGalleryId(galleryId: string): Promise<Photo[]> {
-    return await this.db.select().from(photos).where(eq(photos.galleryId, galleryId)).orderBy(asc(photos.createdAt));
+    return await this.db
+      .select()
+      .from(photos)
+      .where(eq(photos.galleryId, galleryId))
+      .orderBy(asc(photos.createdAt));
   }
 
   async getPhoto(id: string): Promise<Photo | undefined> {
-    const result = await this.db.select().from(photos).where(eq(photos.id, id)).limit(1);
+    const result = await this.db
+      .select()
+      .from(photos)
+      .where(eq(photos.id, id))
+      .limit(1);
     return result[0];
   }
 
@@ -258,20 +313,24 @@ export class DatabaseStorage implements IStorage {
 
       return true;
     } catch (error) {
-      console.error('Error deleting photos:', error);
+      console.error("Error deleting photos:", error);
       return false;
     }
   }
 
   async getPhotosWithData(galleryId: string): Promise<any[]> {
     // Get all photos for the gallery
-    const galleryPhotos = await this.db.select().from(photos).where(eq(photos.galleryId, galleryId)).orderBy(asc(photos.createdAt));
+    const galleryPhotos = await this.db
+      .select()
+      .from(photos)
+      .where(eq(photos.galleryId, galleryId))
+      .orderBy(asc(photos.createdAt));
 
     if (galleryPhotos.length === 0) {
       return [];
     }
 
-    const photoIds = galleryPhotos.map(photo => photo.id);
+    const photoIds = galleryPhotos.map((photo) => photo.id);
 
     // Get all likes for all photos in efficient batch queries
     let allLikes: any[] = [];
@@ -292,25 +351,25 @@ export class DatabaseStorage implements IStorage {
         // Execute both queries in parallel
         const [likesResult, commentsResult] = await Promise.all([
           pool.query(likesQuery, [photoIds]),
-          pool.query(commentsQuery, [photoIds])
+          pool.query(commentsQuery, [photoIds]),
         ]);
 
-        allLikes = likesResult.rows.map(row => ({
+        allLikes = likesResult.rows.map((row) => ({
           id: row.id,
           photoId: row.photo_id,
           isLiked: row.is_liked,
-          createdAt: row.created_at
+          createdAt: row.created_at,
         }));
 
-        allComments = commentsResult.rows.map(row => ({
+        allComments = commentsResult.rows.map((row) => ({
           id: row.id,
           photoId: row.photo_id,
           commenterName: row.commenter_name,
           text: row.text,
-          createdAt: row.created_at
+          createdAt: row.created_at,
         }));
       } catch (error) {
-        console.error('Error fetching likes and comments:', error);
+        console.error("Error fetching likes and comments:", error);
         // Fallback to simpler approach if raw SQL fails
         allLikes = [];
         allComments = [];
@@ -318,41 +377,55 @@ export class DatabaseStorage implements IStorage {
     }
 
     // Group likes and comments by photoId
-    const likesByPhoto = allLikes.reduce((acc, like) => {
-      if (!acc[like.photoId]) acc[like.photoId] = [];
-      acc[like.photoId].push(like);
-      return acc;
-    }, {} as Record<string, any[]>);
+    const likesByPhoto = allLikes.reduce(
+      (acc, like) => {
+        if (!acc[like.photoId]) acc[like.photoId] = [];
+        acc[like.photoId].push(like);
+        return acc;
+      },
+      {} as Record<string, any[]>,
+    );
 
-    const commentsByPhoto = allComments.reduce((acc, comment) => {
-      if (!acc[comment.photoId]) acc[comment.photoId] = [];
-      acc[comment.photoId].push(comment);
-      return acc;
-    }, {} as Record<string, any[]>);
+    const commentsByPhoto = allComments.reduce(
+      (acc, comment) => {
+        if (!acc[comment.photoId]) acc[comment.photoId] = [];
+        acc[comment.photoId].push(comment);
+        return acc;
+      },
+      {} as Record<string, any[]>,
+    );
 
     // Process photos with their data
-    const photosWithAllData = galleryPhotos.map(photo => {
+    const photosWithAllData = galleryPhotos.map((photo) => {
       const photoLikesData = likesByPhoto[photo.id] || [];
-      const likeCount = photoLikesData.filter(like => like.isLiked).length;
-      const dislikeCount = photoLikesData.filter(like => !like.isLiked).length;
+      const likeCount = photoLikesData.filter((like) => like.isLiked).length;
+      const dislikeCount = photoLikesData.filter(
+        (like) => !like.isLiked,
+      ).length;
       const currentLikeStatus = likeCount > dislikeCount;
 
       const photoComments = commentsByPhoto[photo.id] || [];
 
       return {
         ...photo,
-        src: photo.thumbnailPath ? `/${photo.thumbnailPath}` : `/${photo.filePath}`,
-        mediumSrc: photo.mediumPath ? `/${photo.mediumPath}` : `/${photo.filePath}`,
+        src: photo.thumbnailPath
+          ? `/${photo.thumbnailPath}`
+          : `/${photo.filePath}`,
+        mediumSrc: photo.mediumPath
+          ? `/${photo.mediumPath}`
+          : `/${photo.filePath}`,
         originalSrc: `/${photo.filePath}`,
         rating: photo.rating || 0,
         isLiked: currentLikeStatus,
         likeCount: likeCount,
-        comments: photoComments.map(comment => ({
+        comments: photoComments.map((comment) => ({
           id: comment.id,
           author: comment.commenterName,
           text: comment.text,
-          timestamp: comment.createdAt ? new Date(comment.createdAt).toLocaleString('de-DE') : 'Unbekannt'
-        }))
+          timestamp: comment.createdAt
+            ? new Date(comment.createdAt).toLocaleString("de-DE")
+            : "Unbekannt",
+        })),
       };
     });
 
@@ -361,19 +434,28 @@ export class DatabaseStorage implements IStorage {
 
   // Rating methods
   async setPhotoRating(photoId: string, rating: number): Promise<boolean> {
-    const result = await this.db.update(photos).set({ rating: rating }).where(eq(photos.id, photoId));
+    const result = await this.db
+      .update(photos)
+      .set({ rating: rating })
+      .where(eq(photos.id, photoId));
     return result.rowCount !== null && result.rowCount > 0;
   }
 
   async setPhotosRating(photoIds: string[], rating: number): Promise<void> {
     for (const photoId of photoIds) {
-      await this.db.update(photos).set({ rating: rating }).where(eq(photos.id, photoId));
+      await this.db
+        .update(photos)
+        .set({ rating: rating })
+        .where(eq(photos.id, photoId));
     }
   }
 
   // Like methods
   async getAllPhotoLikes(photoId: string): Promise<PhotoLike[]> {
-    return await this.db.select().from(photoLikes).where(eq(photoLikes.photoId, photoId));
+    return await this.db
+      .select()
+      .from(photoLikes)
+      .where(eq(photoLikes.photoId, photoId));
   }
 
   async addPhotoLike(photoId: string, isLiked: boolean): Promise<PhotoLike> {
@@ -389,7 +471,10 @@ export class DatabaseStorage implements IStorage {
 
   async togglePhotoLike(photoId: string, isLiked: boolean): Promise<PhotoLike> {
     // Get all existing likes for this photo
-    const existingLikes = await this.db.select().from(photoLikes).where(eq(photoLikes.photoId, photoId));
+    const existingLikes = await this.db
+      .select()
+      .from(photoLikes)
+      .where(eq(photoLikes.photoId, photoId));
 
     // If there are existing likes, delete them first to avoid duplicates
     if (existingLikes.length > 0) {
@@ -409,7 +494,10 @@ export class DatabaseStorage implements IStorage {
 
   // Comment methods
   async getCommentsByPhotoId(photoId: string): Promise<Comment[]> {
-    return await this.db.select().from(comments).where(eq(comments.photoId, photoId));
+    return await this.db
+      .select()
+      .from(comments)
+      .where(eq(comments.photoId, photoId));
   }
 
   async createComment(comment: InsertComment): Promise<Comment> {
@@ -422,7 +510,11 @@ export class DatabaseStorage implements IStorage {
     return result.rowCount !== null && result.rowCount > 0;
   }
 
-  async addComment(photoId: string, commenterName: string, text: string): Promise<string> {
+  async addComment(
+    photoId: string,
+    commenterName: string,
+    text: string,
+  ): Promise<string> {
     const result = await this.db
       .insert(comments)
       .values({
@@ -437,28 +529,36 @@ export class DatabaseStorage implements IStorage {
 
   // Notification methods
   async getNotificationsByUserId(userId: string): Promise<Notification[]> {
-    return await this.db.select().from(notifications)
+    return await this.db
+      .select()
+      .from(notifications)
       .where(eq(notifications.userId, userId))
       .orderBy(desc(notifications.createdAt))
       .limit(50);
   }
 
-  async createNotification(notification: InsertNotification): Promise<Notification> {
-    console.log('=== CREATE NOTIFICATION DEBUG ===');
-    console.log('Input notification data:', notification);
+  async createNotification(
+    notification: InsertNotification,
+  ): Promise<Notification> {
+    console.log("=== CREATE NOTIFICATION DEBUG ===");
+    console.log("Input notification data:", notification);
     try {
-      const result = await this.db.insert(notifications).values(notification).returning();
-      console.log('Successfully created notification:', result[0]);
-      console.log('=== END CREATE NOTIFICATION DEBUG ===');
+      const result = await this.db
+        .insert(notifications)
+        .values(notification)
+        .returning();
+      console.log("Successfully created notification:", result[0]);
+      console.log("=== END CREATE NOTIFICATION DEBUG ===");
       return result[0];
     } catch (error) {
-      console.error('Database error creating notification:', error);
+      console.error("Database error creating notification:", error);
       throw error;
     }
   }
 
   async markNotificationAsRead(id: string): Promise<boolean> {
-    const result = await this.db.update(notifications)
+    const result = await this.db
+      .update(notifications)
       .set({ isRead: true })
       .where(eq(notifications.id, id));
     return result.rowCount !== null && result.rowCount > 0;
@@ -504,8 +604,8 @@ export class DatabaseStorage implements IStorage {
         .where(
           and(
             eq(galleryAssignments.galleryId, galleryId),
-            eq(galleryAssignments.userId, userId)
-          )
+            eq(galleryAssignments.userId, userId),
+          ),
         )
         .limit(1);
 
@@ -520,15 +620,18 @@ export class DatabaseStorage implements IStorage {
     return assignments;
   }
 
-  async removeGalleryAssignment(galleryId: string, userId: string): Promise<boolean> {
+  async removeGalleryAssignment(
+    galleryId: string,
+    userId: string,
+  ): Promise<boolean> {
     try {
       await this.db
         .delete(galleryAssignments)
         .where(
           and(
             eq(galleryAssignments.galleryId, galleryId),
-            eq(galleryAssignments.userId, userId)
-          )
+            eq(galleryAssignments.userId, userId),
+          ),
         );
       return true;
     } catch (error) {
@@ -546,7 +649,7 @@ export class DatabaseStorage implements IStorage {
       .innerJoin(galleries, eq(galleryAssignments.galleryId, galleries.id))
       .where(eq(galleryAssignments.userId, userId));
 
-    return assigned.map(a => a.gallery);
+    return assigned.map((a) => a.gallery);
   }
 }
 
