@@ -26,8 +26,8 @@ export const galleries = pgTable("galleries", {
   name: text("name").notNull(),
   userId: uuid("user_id")
     .notNull()
-    .references(() => users.id),
-  parentId: uuid("parent_id").references(() => galleries.id),
+    .references(() => users.id, { onDelete: "cascade" }),
+  parentId: uuid("parent_id").references(() => galleries.id, { onDelete: "cascade" }),
   password: text("password"), // Optional password for public access
   createdAt: timestamp("created_at").defaultNow(),
 });
@@ -68,11 +68,11 @@ export const comments = pgTable("comments", {
 export const notifications = pgTable("notifications", {
   id: uuid("id").defaultRandom().primaryKey(),
   userId: uuid("user_id")
-    .references(() => users.id),
+    .references(() => users.id, { onDelete: "cascade" }),
   galleryId: uuid("gallery_id")
-    .references(() => galleries.id),
+    .references(() => galleries.id, { onDelete: "cascade" }),
   photoId: uuid("photo_id")
-    .references(() => photos.id),
+    .references(() => photos.id, { onDelete: "cascade" }),
   type: text("type").notNull(), // 'rating', 'like', 'download', 'comment'
   message: text("message").notNull(),
   actorName: text("actor_name"), // Name of person who performed the action
