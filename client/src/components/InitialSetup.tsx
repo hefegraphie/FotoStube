@@ -12,10 +12,35 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 export default function InitialSetup() {
   const [step, setStep] = useState<"admin" | "smtp" | "complete">("admin");
   const [isLoading, setIsLoading] = useState(false);
+  const [isCheckingSetup, setIsCheckingSetup] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
   const [showSmtpPassword, setShowSmtpPassword] = useState(false);
   const { toast } = useToast();
   const navigate = useNavigate();
+
+  // Check if setup is needed on component mount
+  useEffect(() => {
+    const checkSetupStatus = async () => {
+      try {
+        const response = await fetch("/api/setup/status");
+        const data = await response.json();
+        
+        if (data.hasUsers) {
+          // Redirect to home if users already exist
+          navigate("/", { replace: true });
+        } else {
+          // Setup is needed, show the form
+          setIsCheckingSetup(false);
+        }
+      } catch (error) {
+        console.error("Error checking setup status:", error);
+        // On error, allow setup to proceed
+        setIsCheckingSetup(false);
+      }
+    };
+
+    checkSetupStatus();
+  }, [navigate]);
 
   // Admin data
   const [adminData, setAdminData] = useState({
@@ -161,6 +186,19 @@ export default function InitialSetup() {
       setIsLoading(false);
     }
   };
+
+  // Show loading state while checking setup status
+  if (isCheckingSetup) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center p-6">
+        <Card className="w-full max-w-2xl">
+          <CardContent className="flex items-center justify-center py-12">
+            <p className="text-muted-foreground">Lade...</p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-6">
