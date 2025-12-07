@@ -112,6 +112,13 @@ export default function PhotoCard({
               onError={() => setImageError(true)}
               data-testid={`img-photo-${photo.id}`}
             />
+
+            {/* Image name overlay on hover */}
+            <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center justify-center pointer-events-none">
+              <p className="text-white text-sm font-medium px-4 text-center break-words">
+                {photo.alt}
+              </p>
+            </div>
           </div>
 
           {/* Selection Button - Top Left */}

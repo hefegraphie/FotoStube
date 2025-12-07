@@ -27,6 +27,10 @@ interface PhotoContextType {
   updatePhotoLike: (photoId: string, isLiked: boolean, userName?: string) => Promise<void>;
   addPhotoComment: (photoId: string, comment: string, commenterName: string) => Promise<void>;
   getPhoto: (photoId: string) => Photo | undefined;
+  selectedPhotoIds: Set<string>;
+  setSelectedPhotoIds: (ids: Set<string>) => void;
+  togglePhotoSelection: (photoId: string) => void;
+  clearSelection: () => void;
 }
 
 const PhotoContext = createContext<PhotoContextType | undefined>(undefined);
@@ -45,6 +49,23 @@ interface PhotoProviderProps {
 
 export function PhotoProvider({ children }: PhotoProviderProps) {
   const [photos, setPhotos] = useState<Photo[]>([]);
+  const [selectedPhotoIds, setSelectedPhotoIds] = useState<Set<string>>(new Set());
+
+  const togglePhotoSelection = (photoId: string) => {
+    setSelectedPhotoIds(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(photoId)) {
+        newSet.delete(photoId);
+      } else {
+        newSet.add(photoId);
+      }
+      return newSet;
+    });
+  };
+
+  const clearSelection = () => {
+    setSelectedPhotoIds(new Set());
+  };
 
   const updatePhoto = (photoId: string, updates: Partial<Photo>) => {
     setPhotos(prev => 
@@ -178,7 +199,11 @@ export function PhotoProvider({ children }: PhotoProviderProps) {
       updatePhotoRating,
       updatePhotoLike,
       addPhotoComment,
-      getPhoto
+      getPhoto,
+      selectedPhotoIds,
+      setSelectedPhotoIds,
+      togglePhotoSelection,
+      clearSelection
     }}>
       {children}
     </PhotoContext.Provider>

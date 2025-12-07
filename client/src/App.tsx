@@ -1,5 +1,5 @@
 import React, { useState, useEffect, Suspense, lazy } from "react";
-import { Routes, Route, useParams, useNavigate } from "react-router-dom";
+import { Routes, Route, useParams, useNavigate, Navigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useAuth, AuthProvider } from "./contexts/AuthContext";
@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { LogOut, Upload, ArrowLeft, Menu, Bell, Settings as SettingsIcon } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import LoadingOverlay from "./components/LoadingOverlay";
+import InitialSetup from "@/components/InitialSetup";
 
 // Lazy load heavy components
 const PhotoGallery = lazy(() => import("./components/PhotoGallery"));
@@ -24,14 +25,18 @@ const SubGalleries = lazy(() => import("./components/SubGalleries"));
 const GalleriesOverviewComponent = lazy(
   () => import("./components/GalleriesOverview"),
 );
-const UsersOverviewComponent = lazy(
-  () => import("./components/UsersOverview"),
-);
 const ThemeToggle = lazy(() => import("./components/ThemeToggle"));
 const Breadcrumb = lazy(() => import("./components/Breadcrumb"));
 const PublicGallery = lazy(() => import("./components/PublicGallery"));
 const LightboxPage = lazy(() => import("./components/LightboxPage"));
 const Settings = lazy(() => import("./components/Settings"));
+const ForgotPassword = lazy(() => import("./components/ForgotPassword"));
+const ResetPassword = lazy(() => import("./components/ResetPassword"));
+const GalleryNotFound = lazy(() => import("./components/GalleryNotFound"));
+const AssignmentsPage = lazy(() => import("./components/AssignmentsPage"));
+
+// New component for public lightbox page
+const PublicLightboxPage = lazy(() => import("./components/PublicLightboxPage"));
 
 interface Photo {
   id: string;
@@ -97,7 +102,7 @@ function GalleriesOverview() {
   useEffect(() => {
     setPhotos([]);
   }, [setPhotos]);
-  
+
   const handleSelectGallery = (galleryId: string) => {
     navigate(`/galleries/${galleryId}`);
   };
@@ -113,13 +118,11 @@ function GalleriesOverview() {
       >
         {showSettings ? (
           <Settings onBack={() => setShowSettings(false)} />
-        ) : user?.role === 'Admin' ? (
+        ) : (
           <GalleriesOverviewComponent
             onSelectGallery={handleSelectGallery}
             onOpenSettings={() => setShowSettings(true)}
           />
-        ) : (
-          <UsersOverviewComponent />
         )}
       </Suspense>
     </AuthWrapper>
@@ -135,18 +138,27 @@ function GalleryView() {
   }>();
   const navigate = useNavigate();
   const { user, galleries } = useAuth();
-  
+
 
   const queryClient = useQueryClient();
   const { addNotification } = useNotifications(); // Use addNotification
-  const { photos: sharedPhotos, setPhotos: setSharedPhotos } = usePhotos(); // Use context for photos
+  const {
+    photos: sharedPhotos,
+    setPhotos: setSharedPhotos,
+    updatePhotoRating,
+    updatePhotoLike,
+    addPhotoComment,
+    selectedPhotoIds,
+    togglePhotoSelection,
+    clearSelection,
+  } = usePhotos(); // Use context for photos
   const { toast } = useToast();
 
   // State for loading overlay during batch rating
   const [isBatchRating, setIsBatchRating] = useState(false);
 
   // Query for current gallery data
-  const { data: currentGalleryData } = useQuery({
+  const { data: currentGalleryData, isError: galleryError, error: galleryErrorData } = useQuery({
     queryKey: ["gallery", galleryId],
     queryFn: async () => {
       const response = await fetch(`/api/galleries/${galleryId}`);
@@ -156,11 +168,9 @@ function GalleryView() {
       return response.json();
     },
     enabled: !!galleryId,
+    retry: false, // Don't retry on error
   });
 
-  const [selectedPhotoIds, setSelectedPhotoIds] = useState<Set<string>>(
-    new Set(),
-  );
   const [filters, setFilters] = useState<FilterState>({
     showOnlyLiked: false,
     showOnlyRated: false,
@@ -171,11 +181,6 @@ function GalleryView() {
   const [selectedGalleryId, setSelectedGalleryId] = useState<string | null>(
     null,
   );
-
-  if (!galleryId) {
-    navigate("/galleries");
-    return null;
-  }
 
   // Fetch photos for the selected gallery from backend
   const {
@@ -265,19 +270,11 @@ function GalleryView() {
   const transformedPhotos = sharedPhotos; // Use photos from context
 
   const handleToggleSelection = (photoId: string) => {
-    setSelectedPhotoIds((prev) => {
-      const newSet = new Set(prev);
-      if (newSet.has(photoId)) {
-        newSet.delete(photoId);
-      } else {
-        newSet.add(photoId);
-      }
-      return newSet;
-    });
+    togglePhotoSelection(photoId);
   };
 
   const handleClearSelection = () => {
-    setSelectedPhotoIds(new Set());
+    clearSelection();
   };
 
   const handleBatchRatingChange = async (rating: number) => {
@@ -379,11 +376,7 @@ function GalleryView() {
   };
 
   const handleRemoveFromSelection = (photoId: string) => {
-    setSelectedPhotoIds((prev) => {
-      const newSet = new Set(prev);
-      newSet.delete(photoId);
-      return newSet;
-    });
+    togglePhotoSelection(photoId); // Use context function
   };
 
   const handleSelectAll = () => {
@@ -409,7 +402,10 @@ function GalleryView() {
     });
 
     const filteredPhotoIds = filteredPhotos.map((photo) => photo.id);
-    setSelectedPhotoIds(new Set(filteredPhotoIds));
+    // This should ideally be a function in the context to handle selecting all
+    // For now, directly update the context state if it's exposed, or dispatch an action
+    // Assuming togglePhotoSelection can handle adding multiple IDs or there's a selectAllPhotos function
+    filteredPhotoIds.forEach(id => togglePhotoSelection(id));
   };
 
   const selectedPhotos = transformedPhotos.filter((photo) =>
@@ -458,7 +454,7 @@ function GalleryView() {
       });
 
       if (response.ok) {
-        setSelectedPhotoIds(new Set());
+        handleClearSelection(); // Use context function
         refetch();
       } else {
         console.error("Failed to delete photos");
@@ -716,6 +712,21 @@ function GalleryView() {
     }
   }, [galleryId, currentGalleryData, companyName]);
 
+  // Early returns AFTER all hooks
+  if (!galleryId) {
+    navigate("/galleries");
+    return null;
+  }
+
+  // Show 404 page if gallery not found or access denied
+  if (galleryError) {
+    return (
+      <Suspense fallback={<div className="flex justify-center items-center h-screen"><p>Lädt...</p></div>}>
+        <GalleryNotFound />
+      </Suspense>
+    );
+  }
+
   return (
     <AuthWrapper>
       <Suspense
@@ -743,7 +754,7 @@ function GalleryView() {
                 <Breadcrumb items={getBreadcrumbItems()} />
               </div>
               <div className="flex items-center space-x-2">
-                {user?.role === "Admin" && (
+                {(user?.role === "Admin" || user?.role === "Creator") && (
                   <Button
                     onClick={() => setShowUploadDialog(true)}
                     className="btn-green"
@@ -858,6 +869,26 @@ function App() {
       <Routes>
         {/* Public gallery routes - outside AuthProvider but with PhotoProvider */}
         <Route
+          path="/public/:galleryId"
+          element={
+            <NotificationProvider>
+              <PhotoProvider>
+                <PublicGallery />
+              </PhotoProvider>
+            </NotificationProvider>
+          }
+        />
+        <Route
+          path="/public/:galleryId/photo/:photoId"
+          element={
+            <NotificationProvider>
+              <PhotoProvider>
+                <PublicLightboxPage />
+              </PhotoProvider>
+            </NotificationProvider>
+          }
+        />
+        <Route
           path="/gallery/:galleryId"
           element={
             <NotificationProvider>
@@ -872,7 +903,17 @@ function App() {
           element={
             <NotificationProvider>
               <PhotoProvider>
-                <LightboxPage />
+                <PublicLightboxPage />
+              </PhotoProvider>
+            </NotificationProvider>
+          }
+        />
+        <Route
+          path="/gallery/:parentId/:galleryId"
+          element={
+            <NotificationProvider>
+              <PhotoProvider>
+                <PublicGallery />
               </PhotoProvider>
             </NotificationProvider>
           }
@@ -885,8 +926,21 @@ function App() {
               <NotificationProvider>
                 <PhotoProvider>
                   <Routes>
-                    <Route path="/" element={<GalleriesOverview />} />
+                    <Route path="/" element={<Navigate to="/login" replace />} />
+                    <Route path="/setup" element={<InitialSetup />} />
+                    <Route path="/login" element={<LoginForm />} />
+                    <Route path="/forgot-password" element={<ForgotPassword />} />
+                    <Route path="/reset-password" element={<ResetPassword />} />
                     <Route path="/galleries" element={<GalleriesOverview />} />
+                    <Route path="/assignments" element={
+                      <Suspense fallback={
+                        <div className="flex justify-center items-center h-screen">
+                          <p>Lädt...</p>
+                        </div>
+                      }>
+                        <AssignmentsPage />
+                      </Suspense>
+                    } />
                     <Route
                       path="/galleries/:galleryId"
                       element={<GalleryView />}

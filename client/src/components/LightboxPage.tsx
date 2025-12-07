@@ -337,6 +337,24 @@ export default function LightboxPage() {
   // Swipe handling for mobile
   const [touchStartX, setTouchStartX] = useState(0);
 
+  // Fetch gallery data to check allowDownload
+  const { data: galleryData } = useQuery({
+    queryKey: [`/api/gallery/${galleryId}`],
+    queryFn: async () => {
+      if (!galleryId) return null;
+      const endpoint = isPublicGallery 
+        ? `/api/gallery/${galleryId}/public`
+        : `/api/galleries/${galleryId}`;
+      const response = await fetch(endpoint);
+      if (!response.ok) return null;
+      const data = await response.json();
+      return isPublicGallery ? data.gallery : data;
+    },
+    enabled: !!galleryId,
+  });
+
+  const allowDownload = galleryData?.allowDownload ?? true;
+
   // Fetch branding settings
   const { data: brandingData } = useQuery({
     queryKey: ["/api/branding"],
@@ -415,10 +433,20 @@ export default function LightboxPage() {
                 <div>
                   <h4 className="font-medium mb-2">Bewertung</h4>
                   <div className="flex items-center space-x-1 mb-2">
+                    <button
+                      onClick={() => handleRatingChange(0)}
+                      className="hover:scale-110 transition-transform text-muted-foreground hover:text-red-500"
+                      title="Bewertung löschen"
+                      data-testid="lightbox-clear-rating"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
                     {[1, 2, 3, 4, 5].map((star) => (
                       <button
                         key={star}
                         onClick={() => handleRatingChange(star)}
+                        className="hover:scale-110 transition-transform"
+                        data-testid={`lightbox-star-${star}`}
                       >
                         <Star
                           className={`w-5 h-5 ${star <= currentPhoto.rating ? "fill-yellow-400 text-yellow-400" : "text-muted-foreground"}`}
@@ -446,10 +474,12 @@ export default function LightboxPage() {
                 </Button>
 
                 {/* Download Button */}
-                <Button onClick={handleDownloadPhoto} className="w-full">
-                  <Download className="w-5 h-5 mr-2" />
-                  Bild herunterladen
-                </Button>
+                {allowDownload && (
+                  <Button onClick={handleDownloadPhoto} className="w-full">
+                    <Download className="w-5 h-5 mr-2" />
+                    Bild herunterladen
+                  </Button>
+                )}
 
                 {/* Comments */}
                 <div>
@@ -564,10 +594,22 @@ export default function LightboxPage() {
             <div className="mb-4">
               <h4 className="font-medium mb-2">Bewertung</h4>
               <div className="flex items-center space-x-1 mb-2">
+                <button
+                  onClick={() => handleRatingChange(0)}
+                  className="hover:scale-110 transition-transform text-muted-foreground hover:text-red-500"
+                  title="Bewertung löschen"
+                  data-testid="lightbox-clear-rating"
+                >
+                  <X className="w-4 h-4" />
+                </button>
                 {[1, 2, 3, 4, 5].map((star) => (
                   <button key={star} onClick={() => handleRatingChange(star)}>
                     <Star
-                      className={`w-5 h-5 ${star <= currentPhoto.rating ? "fill-yellow-400 text-yellow-400" : "text-muted-foreground"}`}
+                      className={`w-5 h-5 ${
+                        star <= currentPhoto.rating
+                          ? "fill-yellow-400 text-yellow-400"
+                          : "text-muted-foreground"
+                      }`}
                     />
                   </button>
                 ))}
@@ -588,10 +630,12 @@ export default function LightboxPage() {
             </Button>
 
             {/* Download Button */}
-            <Button onClick={handleDownloadPhoto} className="mb-6">
-              <Download className="w-5 h-5 mr-2" />
-              Bild herunterladen
-            </Button>
+            {allowDownload && (
+              <Button onClick={handleDownloadPhoto} className="mb-6">
+                <Download className="w-5 h-5 mr-2" />
+                Bild herunterladen
+              </Button>
+            )}
 
             {/* Comments */}
             <div>
@@ -643,10 +687,20 @@ export default function LightboxPage() {
       {/* Mobile Bottom Controls */}
       {isMobile && (
         <div className="fixed bottom-0 left-0 right-0 z-50 bg-background/95 backdrop-blur-sm border-t p-4 flex justify-between items-center">
-          <Button variant="ghost" size="icon" onClick={handleDownloadPhoto}>
-            <Download className="w-5 h-5" />
-          </Button>
+          {allowDownload && (
+            <Button variant="ghost" size="icon" onClick={handleDownloadPhoto}>
+              <Download className="w-5 h-5" />
+            </Button>
+          )}
           <div className="flex items-center space-x-1">
+            <button
+              onClick={() => handleRatingChange(0)}
+              className="hover:scale-110 transition-transform text-muted-foreground hover:text-red-500"
+              title="Bewertung löschen"
+              data-testid="lightbox-clear-rating"
+            >
+              <X className="w-4 h-4" />
+            </button>
             {[1, 2, 3, 4, 5].map((star) => (
               <button key={star} onClick={() => handleRatingChange(star)}>
                 <Star

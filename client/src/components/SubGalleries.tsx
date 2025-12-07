@@ -1,6 +1,5 @@
-
 import { useState } from "react";
-import { Plus, Calendar, Image, MoreVertical, Edit2, Trash2, Folder } from "lucide-react";
+import { Plus, Calendar, Image, MoreVertical, Edit2, Trash2, Folder, Download } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -33,6 +32,7 @@ interface SubGallery {
   photoCount: number;
   lastModified: string;
   createdAt: string;
+  allowDownload: boolean; // Added allowDownload property
 }
 
 interface GalleryPreview {
@@ -58,22 +58,32 @@ export default function SubGalleries({ parentGalleryId, onSelectSubGallery, isSu
     // Not in auth context (public gallery), user remains null
   }
 
-  const isAdmin = user?.role === "Admin";
+  const isAdminOrCreator = user?.role === "Admin" || user?.role === "Creator";
 
   const { toast } = useToast();
   const { setPhotos } = usePhotos();
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [subGalleryName, setSubGalleryName] = useState("");
-  
+  const [allowDownload, setAllowDownload] = useState(true); // State for download permission
+
   const [isRenameDialogOpen, setIsRenameDialogOpen] = useState(false);
   const [renameSubGalleryId, setRenameSubGalleryId] = useState<string | null>(null);
   const [newSubGalleryName, setNewSubGalleryName] = useState("");
 
+  const [isDownloadSettingsDialogOpen, setIsDownloadSettingsDialogOpen] = useState(false);
+  const [downloadSettingsSubGalleryId, setDownloadSettingsSubGalleryId] = useState<string | null>(null);
+  const [downloadSettingsAllowDownload, setDownloadSettingsAllowDownload] = useState(true);
+
   // Fetch sub-galleries
   const { data: subGalleries = [], refetch } = useQuery({
-    queryKey: ['sub-galleries', parentGalleryId],
+    queryKey: ['sub-galleries', parentGalleryId, user ? 'auth' : 'public'],
     queryFn: async (): Promise<SubGallery[]> => {
-      const response = await fetch(`/api/galleries/${parentGalleryId}/sub-galleries`);
+      // Use public endpoint if not authenticated
+      const endpoint = user 
+        ? `/api/galleries/${parentGalleryId}/sub-galleries`
+        : `/api/gallery/${parentGalleryId}/sub-galleries/public`;
+      
+      const response = await fetch(endpoint);
       if (!response.ok) {
         throw new Error('Failed to fetch sub-galleries');
       }
@@ -84,12 +94,13 @@ export default function SubGalleries({ parentGalleryId, onSelectSubGallery, isSu
 
   // Create sub-gallery mutation
   const createSubGalleryMutation = useMutation({
-    mutationFn: async ({ name, password }: { name: string; password: string | null }) => {
+    mutationFn: async ({ name, password, allowDownload }: { name: string; password: string | null; allowDownload: boolean }) => {
       return apiRequest('POST', '/api/galleries', {
         name,
         password: null, // Sub-galleries inherit parent password
         userId: user?.id,
         parentId: parentGalleryId,
+        allowDownload: allowDownload, // Include allowDownload in the mutation
       });
     },
     onSuccess: () => {
@@ -99,6 +110,7 @@ export default function SubGalleries({ parentGalleryId, onSelectSubGallery, isSu
       });
       setIsCreateDialogOpen(false);
       setSubGalleryName("");
+      setAllowDownload(true); // Reset checkbox state
       refetch();
     },
     onError: (error: any) => {
@@ -157,12 +169,35 @@ export default function SubGalleries({ parentGalleryId, onSelectSubGallery, isSu
     },
   });
 
+  // Update download settings mutation
+  const updateDownloadSettingsMutation = useMutation({
+    mutationFn: async ({ subGalleryId, allowDownload }: { subGalleryId: string; allowDownload: boolean }) => {
+      return apiRequest('PATCH', `/api/galleries/${subGalleryId}/download-settings`, { allowDownload });
+    },
+    onSuccess: () => {
+      toast({
+        title: "Download-Einstellungen aktualisiert",
+        description: "Die Download-Einstellungen wurden erfolgreich gespeichert.",
+      });
+      setIsDownloadSettingsDialogOpen(false);
+      setDownloadSettingsSubGalleryId(null);
+      refetch();
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Fehler",
+        description: "Die Download-Einstellungen konnten nicht aktualisiert werden.",
+        variant: "destructive",
+      });
+    },
+  });
+
   // If we're already in a sub-gallery, don't show the sub-galleries section at all
   if (isSubGallery) {
     return null;
   }
 
-  
+
 
   const handleCreateSubGallery = () => {
     if (!subGalleryName.trim()) {
@@ -173,14 +208,15 @@ export default function SubGalleries({ parentGalleryId, onSelectSubGallery, isSu
       });
       return;
     }
-    createSubGalleryMutation.mutate({ 
-      name: subGalleryName.trim(), 
-      password: null 
+    createSubGalleryMutation.mutate({
+      name: subGalleryName.trim(),
+      password: null,
+      allowDownload: allowDownload
     });
   };
 
   const handleDeleteSubGallery = (subGalleryId: string, subGalleryName: string) => {
-    if (confirm(`Möchtest du die Sub-Galerie "${subGalleryName}" wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.`)) {
+    if (confirm(`Möchtest du die Sub-Galerie "${subGalleryName}" wirklich löschen? Diese Aktion kann nicht rückrückgängig gemacht werden.`)) {
       deleteSubGalleryMutation.mutate(subGalleryId);
     }
   };
@@ -206,12 +242,31 @@ export default function SubGalleries({ parentGalleryId, onSelectSubGallery, isSu
     });
   };
 
-  
+  const handleOpenDownloadSettings = (subGalleryId: string) => {
+    setDownloadSettingsSubGalleryId(subGalleryId);
+    const subGallery = subGalleries.find(g => g.id === subGalleryId);
+    if (subGallery) {
+      setDownloadSettingsAllowDownload(subGallery.allowDownload ?? true);
+    } else {
+      setDownloadSettingsAllowDownload(true);
+    }
+    setIsDownloadSettingsDialogOpen(true);
+  };
+
+  const handleUpdateDownloadSettings = () => {
+    if (!downloadSettingsSubGalleryId) return;
+    updateDownloadSettingsMutation.mutate({
+      subGalleryId: downloadSettingsSubGalleryId,
+      allowDownload: downloadSettingsAllowDownload,
+    });
+  };
+
+
 
   if (subGalleries.length === 0) {
     return (
       <>
-        {isAdmin && (
+        {isAdminOrCreator && (
           <div className="mb-6">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-medium">Sub-Galerien</h3>
@@ -247,9 +302,30 @@ export default function SubGalleries({ parentGalleryId, onSelectSubGallery, isSu
                   onChange={(e) => setSubGalleryName(e.target.value)}
                   className="col-span-3"
                   placeholder="z.B. Hochzeit Tag 1"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      handleCreateSubGallery();
+                    }
+                  }}
                 />
               </div>
-              
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="sub-allow-download" className="text-right">
+                  Downloads erlauben
+                </Label>
+                <div className="col-span-3 flex items-center space-x-2">
+                  <input
+                    id="sub-allow-download"
+                    type="checkbox"
+                    checked={allowDownload}
+                    onChange={(e) => setAllowDownload(e.target.checked)}
+                    className="h-4 w-4"
+                  />
+                  <span className="text-sm text-muted-foreground">
+                    Besuchern das Herunterladen von Fotos erlauben
+                  </span>
+                </div>
+              </div>
             </div>
             <DialogFooter>
               <Button
@@ -277,7 +353,7 @@ export default function SubGalleries({ parentGalleryId, onSelectSubGallery, isSu
     <div className="mb-6">
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-lg font-medium">Sub-Galerien ({subGalleries.length})</h3>
-        {isAdmin && (
+        {isAdminOrCreator && (
           <Button
             variant="outline"
             size="sm"
@@ -316,7 +392,7 @@ export default function SubGalleries({ parentGalleryId, onSelectSubGallery, isSu
                     </div>
                   </div>
                 </div>
-                {isAdmin && (
+                {isAdminOrCreator && (
                   <div className="flex-shrink-0">
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
@@ -338,6 +414,15 @@ export default function SubGalleries({ parentGalleryId, onSelectSubGallery, isSu
                         >
                           <Edit2 className="h-3 w-3 mr-2" />
                           Umbenennen
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleOpenDownloadSettings(subGallery.id);
+                          }}
+                        >
+                          <Download className="h-3 w-3 mr-2" />
+                          Download-Einstellungen
                         </DropdownMenuItem>
                         <DropdownMenuItem
                           onClick={(e) => {
@@ -386,6 +471,23 @@ export default function SubGalleries({ parentGalleryId, onSelectSubGallery, isSu
                 }}
               />
             </div>
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="sub-allow-download" className="text-right">
+                Downloads erlauben
+              </Label>
+              <div className="col-span-3 flex items-center space-x-2">
+                <input
+                  id="sub-allow-download"
+                  type="checkbox"
+                  checked={allowDownload}
+                  onChange={(e) => setAllowDownload(e.target.checked)}
+                  className="h-4 w-4"
+                />
+                <span className="text-sm text-muted-foreground">
+                  Besuchern das Herunterladen von Fotos erlauben
+                </span>
+              </div>
+            </div>
           </div>
           <DialogFooter>
             <Button
@@ -401,6 +503,46 @@ export default function SubGalleries({ parentGalleryId, onSelectSubGallery, isSu
               disabled={createSubGalleryMutation.isPending}
             >
               {createSubGalleryMutation.isPending ? "Erstelle..." : "Sub-Galerie erstellen"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Download Settings Dialog */}
+      <Dialog open={isDownloadSettingsDialogOpen} onOpenChange={setIsDownloadSettingsDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Download-Einstellungen</DialogTitle>
+            <DialogDescription>
+              Stelle ein, ob Besucher Fotos aus dieser Sub-Galerie herunterladen dürfen.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex items-center space-x-2 py-4">
+            <input
+              id="sub-download-settings-allow"
+              type="checkbox"
+              checked={downloadSettingsAllowDownload}
+              onChange={(e) => setDownloadSettingsAllowDownload(e.target.checked)}
+              className="h-4 w-4"
+            />
+            <label htmlFor="sub-download-settings-allow" className="text-sm font-medium">
+              Downloads erlauben
+            </label>
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setIsDownloadSettingsDialogOpen(false)}
+            >
+              Abbrechen
+            </Button>
+            <Button
+              type="button"
+              onClick={handleUpdateDownloadSettings}
+              disabled={updateDownloadSettingsMutation.isPending}
+            >
+              {updateDownloadSettingsMutation.isPending ? "Speichert..." : "Speichern"}
             </Button>
           </DialogFooter>
         </DialogContent>

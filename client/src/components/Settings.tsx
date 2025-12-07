@@ -60,6 +60,7 @@ export default function Settings({ onBack, hideUserManagement = false }: Setting
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [userFormData, setUserFormData] = useState({
     name: "",
+    email: "",
     password: "",
     role: "User",
   });
@@ -68,6 +69,17 @@ export default function Settings({ onBack, hideUserManagement = false }: Setting
 
   // Branding State
   const [companyName, setCompanyName] = useState("");
+
+  // System Settings State
+  const [systemSettings, setSystemSettings] = useState({
+    smtpHost: "",
+    smtpPort: "",
+    smtpUser: "",
+    smtpPassword: "",
+    smtpFrom: "",
+    appUrl: "",
+  });
+  const [showSmtpPassword, setShowSmtpPassword] = useState(false);
 
   // Fetch branding settings
   const { data: brandingData } = useQuery({
@@ -79,12 +91,46 @@ export default function Settings({ onBack, hideUserManagement = false }: Setting
     },
   });
 
+  // Fetch system settings
+  const { data: systemSettingsData } = useQuery({
+    queryKey: ["/api/system-settings"],
+    enabled: !!user && user.role === "Admin",
+    queryFn: async () => {
+      const token = localStorage.getItem('authToken');
+      const response = await fetch("/api/system-settings", {
+        credentials: 'include',
+        headers: {
+          ...(token && { 'Authorization': `Bearer ${token}` })
+        }
+      });
+      if (!response.ok) throw new Error("Failed to fetch system settings");
+      return response.json();
+    },
+  });
+
   // Set company name when data loads
   useEffect(() => {
     if (brandingData?.companyName) {
       setCompanyName(brandingData.companyName);
     }
   }, [brandingData]);
+
+  // Set system settings when data loads
+  useEffect(() => {
+    console.log("System settings data received:", systemSettingsData);
+    if (systemSettingsData) {
+      const settings = {
+        smtpHost: systemSettingsData.smtpHost || "",
+        smtpPort: systemSettingsData.smtpPort?.toString() || "",
+        smtpUser: systemSettingsData.smtpUser || "",
+        smtpPassword: systemSettingsData.smtpPassword || "",
+        smtpFrom: systemSettingsData.smtpFrom || "",
+        appUrl: systemSettingsData.appUrl || "",
+      };
+      console.log("Setting system settings to:", settings);
+      setSystemSettings(settings);
+    }
+  }, [systemSettingsData]);
 
   // Set page title
   useEffect(() => {
@@ -129,6 +175,55 @@ export default function Settings({ onBack, hideUserManagement = false }: Setting
         toast({
           title: "Fehler",
           description: error.error || "Branding konnte nicht aktualisiert werden.",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Fehler",
+        description: "Ein Fehler ist aufgetreten.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleSystemSettingsUpdate = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    setIsLoading(true);
+
+    try {
+      const token = localStorage.getItem('authToken');
+      const response = await fetch("/api/system-settings", {
+        method: "POST",
+        credentials: 'include',
+        headers: {
+          "Content-Type": "application/json",
+          ...(token && { 'Authorization': `Bearer ${token}` })
+        },
+        body: JSON.stringify({
+          smtpHost: systemSettings.smtpHost.trim() || null,
+          smtpPort: systemSettings.smtpPort ? parseInt(systemSettings.smtpPort) : null,
+          smtpUser: systemSettings.smtpUser.trim() || null,
+          smtpPassword: systemSettings.smtpPassword.trim() || null,
+          smtpFrom: systemSettings.smtpFrom.trim() || null,
+          appUrl: systemSettings.appUrl.trim() || null,
+        }),
+      });
+
+      if (response.ok) {
+        toast({
+          title: "Erfolg",
+          description: "Systemeinstellungen wurden erfolgreich aktualisiert.",
+        });
+        queryClient.invalidateQueries({ queryKey: ["/api/system-settings"] });
+      } else {
+        const error = await response.json();
+        toast({
+          title: "Fehler",
+          description: error.error || "Systemeinstellungen konnten nicht aktualisiert werden.",
           variant: "destructive",
         });
       }
@@ -290,7 +385,7 @@ export default function Settings({ onBack, hideUserManagement = false }: Setting
   };
 
   const handleCreateUser = async () => {
-    if (!userFormData.name || !userFormData.password) {
+    if (!userFormData.name || !userFormData.email || !userFormData.password) {
       toast({
         title: "Fehler",
         description: "Bitte fülle alle Felder aus.",
@@ -320,6 +415,7 @@ export default function Settings({ onBack, hideUserManagement = false }: Setting
         },
         body: JSON.stringify({
           name: userFormData.name.trim(),
+          email: userFormData.email.trim(),
           password: userFormData.password,
           role: userFormData.role
         }),
@@ -331,7 +427,7 @@ export default function Settings({ onBack, hideUserManagement = false }: Setting
           description: "Benutzer erfolgreich erstellt.",
         });
         setIsCreateUserDialogOpen(false);
-        setUserFormData({ name: "", password: "", role: "User" });
+        setUserFormData({ name: "", email: "", password: "", role: "User" });
         refetchUsers();
       } else {
         const errorData = await response.json();
@@ -354,7 +450,7 @@ export default function Settings({ onBack, hideUserManagement = false }: Setting
   };
 
   const handleEditUser = async () => {
-    if (!editUserId || !userFormData.name) {
+    if (!editUserId || !userFormData.name || !userFormData.email) {
       toast({
         title: "Fehler",
         description: "Bitte fülle alle erforderlichen Felder aus.",
@@ -377,6 +473,7 @@ export default function Settings({ onBack, hideUserManagement = false }: Setting
       const token = localStorage.getItem('authToken');
       const updateData: any = {
         name: userFormData.name.trim(),
+        email: userFormData.email.trim(),
         role: userFormData.role
       };
 
@@ -402,7 +499,7 @@ export default function Settings({ onBack, hideUserManagement = false }: Setting
         });
         setIsEditUserDialogOpen(false);
         setEditUserId(null);
-        setUserFormData({ name: "", password: "", role: "User" });
+        setUserFormData({ name: "", email: "", password: "", role: "User" });
         refetchUsers();
       } else {
         const errorData = await response.json();
@@ -481,12 +578,13 @@ export default function Settings({ onBack, hideUserManagement = false }: Setting
 
         {/* Tabs */}
         <Tabs defaultValue="account" className="w-full">
-          <TabsList className={`grid w-full ${!hideUserManagement && user?.role === "Admin" ? "grid-cols-3" : "grid-cols-1"}`}>
+          <TabsList className={`grid w-full ${!hideUserManagement && user?.role === "Admin" ? "grid-cols-1 sm:grid-cols-4" : "grid-cols-1"}`}>
             <TabsTrigger value="account">Kontodaten</TabsTrigger>
             {!hideUserManagement && user?.role === "Admin" && (
               <>
                 <TabsTrigger value="users">Benutzerverwaltung</TabsTrigger>
                 <TabsTrigger value="branding">Branding</TabsTrigger>
+                <TabsTrigger value="system">System</TabsTrigger>
               </>
             )}
           </TabsList>
@@ -617,6 +715,104 @@ export default function Settings({ onBack, hideUserManagement = false }: Setting
             </Card>
           </TabsContent>
 
+          {/* System Tab (Admin only) */}
+          {!hideUserManagement && user?.role === "Admin" && (
+            <TabsContent value="system" className="space-y-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle>SMTP Einstellungen</CardTitle>
+                  <CardDescription>
+                    Konfiguriere die E-Mail-Einstellungen für Passwort-Reset und Benachrichtigungen
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <form onSubmit={handleSystemSettingsUpdate} className="space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="smtp-host">SMTP Host</Label>
+                      <Input
+                        id="smtp-host"
+                        type="text"
+                        value={systemSettings.smtpHost}
+                        onChange={(e) => setSystemSettings({ ...systemSettings, smtpHost: e.target.value })}
+                        placeholder="z.B. smtp.gmail.com"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="smtp-port">SMTP Port</Label>
+                      <Input
+                        id="smtp-port"
+                        type="number"
+                        value={systemSettings.smtpPort}
+                        onChange={(e) => setSystemSettings({ ...systemSettings, smtpPort: e.target.value })}
+                        placeholder="z.B. 587"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="smtp-user">SMTP Benutzer</Label>
+                      <Input
+                        id="smtp-user"
+                        type="text"
+                        value={systemSettings.smtpUser}
+                        onChange={(e) => setSystemSettings({ ...systemSettings, smtpUser: e.target.value })}
+                        placeholder="z.B. deine-email@beispiel.de"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="smtp-password">SMTP Passwort</Label>
+                      <div className="relative">
+                        <Input
+                          id="smtp-password"
+                          type={showSmtpPassword ? "text" : "password"}
+                          value={systemSettings.smtpPassword}
+                          onChange={(e) => setSystemSettings({ ...systemSettings, smtpPassword: e.target.value })}
+                          className="pr-10"
+                          placeholder="SMTP Passwort"
+                        />
+                        <button
+                          type="button"
+                          className="absolute right-3 top-1/2 transform -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                          onClick={() => setShowSmtpPassword(!showSmtpPassword)}
+                        >
+                          {showSmtpPassword ? (
+                            <EyeOff className="h-4 w-4" />
+                          ) : (
+                            <Eye className="h-4 w-4" />
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="smtp-from">SMTP Absender</Label>
+                      <Input
+                        id="smtp-from"
+                        type="text"
+                        value={systemSettings.smtpFrom}
+                        onChange={(e) => setSystemSettings({ ...systemSettings, smtpFrom: e.target.value })}
+                        placeholder="z.B. noreply@beispiel.de"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="app-url">App URL</Label>
+                      <Input
+                        id="app-url"
+                        type="text"
+                        value={systemSettings.appUrl}
+                        onChange={(e) => setSystemSettings({ ...systemSettings, appUrl: e.target.value })}
+                        placeholder="z.B. https://deine-url.de"
+                      />
+                      <p className="text-sm text-muted-foreground">
+                        Diese URL wird für Links in E-Mails verwendet (z.B. Passwort zurücksetzen)
+                      </p>
+                    </div>
+                    <Button type="submit" disabled={isLoading}>
+                      {isLoading ? "Wird gespeichert..." : "Speichern"}
+                    </Button>
+                  </form>
+                </CardContent>
+              </Card>
+            </TabsContent>
+          )}
+
           {/* Branding Tab (Admin only) */}
           {!hideUserManagement && user?.role === "Admin" && (
             <TabsContent value="branding" className="space-y-4">
@@ -657,7 +853,7 @@ export default function Settings({ onBack, hideUserManagement = false }: Setting
             <TabsContent value="users" className="space-y-4">
               <Card>
                 <CardHeader>
-                  <div className="flex items-center justify-between">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                     <div>
                       <CardTitle>Benutzerverwaltung</CardTitle>
                       <CardDescription>
@@ -666,10 +862,11 @@ export default function Settings({ onBack, hideUserManagement = false }: Setting
                     </div>
                     <Button
                       onClick={() => {
-                        setUserFormData({ name: "", password: "", role: "User" });
+                        setUserFormData({ name: "", email: "", password: "", role: "User" });
                         setIsCreateUserDialogOpen(true);
                       }}
                       data-testid="button-create-user"
+                      className="w-full sm:w-auto"
                     >
                       <UserPlus className="w-4 h-4 mr-2" />
                       Benutzer anlegen
@@ -695,6 +892,7 @@ export default function Settings({ onBack, hideUserManagement = false }: Setting
                               setSelectedUser(u);
                               setUserFormData({
                                 name: u.name,
+                                email: (u as any).email || "",
                                 password: "", // Clear password on edit
                                 role: u.role,
                               });
@@ -745,22 +943,48 @@ export default function Settings({ onBack, hideUserManagement = false }: Setting
                 />
               </div>
               <div className="space-y-2">
+                <Label htmlFor="user-email">E-Mail</Label>
+                <Input
+                  id="user-email"
+                  type="email"
+                  value={userFormData.email || ""}
+                  onChange={(e) => setUserFormData({ ...userFormData, email: e.target.value })}
+                />
+              </div>
+              <div className="space-y-2">
                 <Label htmlFor="user-password">Passwort</Label>
-                <div className="relative">
-                  <Input
-                    id="user-password"
-                    type={showUserPassword ? "text" : "password"}
-                    value={userFormData.password}
-                    onChange={(e) => setUserFormData({ ...userFormData, password: e.target.value })}
-                    className="pr-10"
-                  />
-                  <button
+                <div className="flex space-x-2">
+                  <div className="relative flex-1">
+                    <Input
+                      id="user-password"
+                      type={showUserPassword ? "text" : "password"}
+                      value={userFormData.password}
+                      onChange={(e) => setUserFormData({ ...userFormData, password: e.target.value })}
+                      className="pr-10"
+                    />
+                    <button
+                      type="button"
+                      className="absolute right-3 top-1/2 transform -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                      onClick={() => setShowUserPassword(!showUserPassword)}
+                    >
+                      {showUserPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </div>
+                  <Button
                     type="button"
-                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                    onClick={() => setShowUserPassword(!showUserPassword)}
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      const password = Array.from({ length: 12 }, () => {
+                        const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*';
+                        return chars[Math.floor(Math.random() * chars.length)];
+                      }).join('');
+                      setUserFormData({ ...userFormData, password });
+                    }}
+                    className="px-3"
                   >
-                    {showUserPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </button>
+                    Generieren
+                  </Button>
                 </div>
               </div>
               <div className="space-y-2">
@@ -772,6 +996,7 @@ export default function Settings({ onBack, hideUserManagement = false }: Setting
                   onChange={(e) => setUserFormData({ ...userFormData, role: e.target.value })}
                 >
                   <option value="User">User</option>
+                  <option value="Creator">Creator</option>
                   <option value="Admin">Admin</option>
                 </select>
               </div>
@@ -804,23 +1029,49 @@ export default function Settings({ onBack, hideUserManagement = false }: Setting
                 />
               </div>
               <div className="space-y-2">
+                <Label htmlFor="edit-user-email">E-Mail</Label>
+                <Input
+                  id="edit-user-email"
+                  type="email"
+                  value={userFormData.email || ""}
+                  onChange={(e) => setUserFormData({ ...userFormData, email: e.target.value })}
+                />
+              </div>
+              <div className="space-y-2">
                 <Label htmlFor="edit-user-password">Neues Passwort (optional)</Label>
-                <div className="relative">
-                  <Input
-                    id="edit-user-password"
-                    type={showUserPassword ? "text" : "password"}
-                    value={userFormData.password}
-                    onChange={(e) => setUserFormData({ ...userFormData, password: e.target.value })}
-                    className="pr-10"
-                    placeholder="Leer lassen, um nicht zu ändern"
-                  />
-                  <button
+                <div className="flex space-x-2">
+                  <div className="relative flex-1">
+                    <Input
+                      id="edit-user-password"
+                      type={showUserPassword ? "text" : "password"}
+                      value={userFormData.password}
+                      onChange={(e) => setUserFormData({ ...userFormData, password: e.target.value })}
+                      className="pr-10"
+                      placeholder="Leer lassen, um nicht zu ändern"
+                    />
+                    <button
+                      type="button"
+                      className="absolute right-3 top-1/2 transform -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                      onClick={() => setShowUserPassword(!showUserPassword)}
+                    >
+                      {showUserPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </div>
+                  <Button
                     type="button"
-                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                    onClick={() => setShowUserPassword(!showUserPassword)}
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      const password = Array.from({ length: 12 }, () => {
+                        const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*';
+                        return chars[Math.floor(Math.random() * chars.length)];
+                      }).join('');
+                      setUserFormData({ ...userFormData, password });
+                    }}
+                    className="px-3"
                   >
-                    {showUserPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </button>
+                    Generieren
+                  </Button>
                 </div>
               </div>
               <div className="space-y-2">
@@ -839,7 +1090,8 @@ export default function Settings({ onBack, hideUserManagement = false }: Setting
             <DialogFooter>
               <Button variant="outline" onClick={() => {
                 setIsEditUserDialogOpen(false);
-                setEditUserId(null); // Clear the edit user ID
+                setEditUserId(null);
+                setUserFormData({ name: "", email: "", password: "", role: "User" });
               }}>
                 Abbrechen
               </Button>
