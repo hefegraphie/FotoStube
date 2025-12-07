@@ -16,7 +16,8 @@ import { relations } from "drizzle-orm";
 
 export const users = pgTable("users", {
   id: uuid("id").defaultRandom().primaryKey(),
-  name: text("name").notNull(),
+  name: text("name").notNull().unique(),
+  email: text("email").notNull().unique(),
   password: text("password").notNull(),
   role: text("role").notNull().default("User"), // "Admin" or "User"
 });
@@ -29,6 +30,7 @@ export const galleries = pgTable("galleries", {
     .references(() => users.id, { onDelete: "cascade" }),
   parentId: uuid("parent_id").references(() => galleries.id, { onDelete: "cascade" }),
   password: text("password"), // Optional password for public access
+  allowDownload: boolean("allow_download").default(true), // Allow downloads for public galleries
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -97,6 +99,27 @@ export const brandingSettings = pgTable("branding_settings", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+export const systemSettings = pgTable("system_settings", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  smtpHost: text("smtp_host"),
+  smtpPort: integer("smtp_port"),
+  smtpUser: text("smtp_user"),
+  smtpPassword: text("smtp_password"),
+  smtpFrom: text("smtp_from"),
+  appUrl: text("app_url"),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const passwordResetTokens = pgTable("password_reset_tokens", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  userId: uuid("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  token: text("token").notNull().unique(),
+  expiresAt: timestamp("expires_at").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 // ------------------ RELATIONS ------------------
 
 export const usersRelations = relations(users, ({ many }) => ({
@@ -146,6 +169,10 @@ export const galleryAssignmentsRelations = relations(galleryAssignments, ({ one 
 
 export const brandingSettingsRelations = relations(brandingSettings, () => ({
   // No direct relations needed for brandingSettings for now
+}));
+
+export const passwordResetTokensRelations = relations(passwordResetTokens, ({ one }) => ({
+  user: one(users, { fields: [passwordResetTokens.userId], references: [users.id] }),
 }));
 
 // ------------------ INSERT SCHEMAS ------------------
@@ -211,3 +238,11 @@ export type GalleryAssignment = typeof galleryAssignments.$inferSelect;
 
 export type InsertBrandingSettings = z.infer<typeof insertBrandingSettingsSchema>;
 export type BrandingSettings = typeof brandingSettings.$inferSelect;
+
+export const insertPasswordResetTokenSchema = createInsertSchema(passwordResetTokens).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertPasswordResetToken = z.infer<typeof insertPasswordResetTokenSchema>;
+export type PasswordResetToken = typeof passwordResetTokens.$inferSelect;
