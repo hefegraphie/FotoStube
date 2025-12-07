@@ -29,8 +29,11 @@ import {
 } from "../shared/schema";
 import { eq, desc, and } from "drizzle-orm";
 import bcrypt from "bcrypt";
-import { authenticateJWT, requireAdmin } from "./auth";
+import { authenticateJWT, requireAdmin, requireAdminOrCreator } from "./auth";
 import { db } from "./storage";
+import { sendPasswordResetEmail } from "./mailer";
+import crypto from "crypto";
+import { checkInitialSetup, createInitialAdmin, configureSmtp } from "./setup";
 
 // Ensure upload directories exist
 const ensureUploadDirs = () => {
@@ -83,6 +86,117 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Serve uploaded files statically
   app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
 
+  // Setup status route (public)
+  app.get("/api/setup/status", async (req, res) => {
+    try {
+      const status = await checkInitialSetup();
+      res.json(status);
+    } catch (error) {
+      console.error("Error checking setup status:", error);
+      res.status(500).json({ error: "Fehler beim Prüfen des Setup-Status" });
+    }
+  });
+
+  // Initial admin creation route (public, only if no users exist)
+  app.post("/api/setup/create-admin", async (req, res) => {
+    try {
+      const status = await checkInitialSetup();
+      
+      if (status.hasUsers) {
+        return res.status(403).json({ error: "Setup bereits abgeschlossen" });
+      }
+
+      const { name, email, password } = req.body;
+
+      if (!name || !email || !password) {
+        return res.status(400).json({ error: "Alle Felder sind erforderlich" });
+      }
+
+      if (password.length < 6) {
+        return res.status(400).json({ error: "Passwort muss mindestens 6 Zeichen lang sein" });
+      }
+
+      const user = await createInitialAdmin({ name, email, password });
+      const { password: _, ...userWithoutPassword } = user;
+
+      res.status(201).json({ user: userWithoutPassword });
+    } catch (error) {
+      console.error("Error creating initial admin:", error);
+      res.status(500).json({ error: "Fehler beim Erstellen des Admin-Benutzers" });
+    }
+  });
+
+  // SMTP configuration route (public, only during initial setup)
+  app.post("/api/setup/configure-smtp", async (req, res) => {
+    try {
+      const status = await checkInitialSetup();
+      
+      // Allow SMTP configuration even if users exist but SMTP is not configured
+      if (status.hasSmtpConfig && !req.user?.role) {
+        return res.status(403).json({ error: "SMTP bereits konfiguriert" });
+      }
+
+      const { smtpHost, smtpPort, smtpUser, smtpPassword, smtpFrom, appUrl } = req.body;
+
+      // Allow skipping SMTP configuration
+      if (!smtpHost && !smtpUser) {
+        return res.json({ 
+          skipped: true, 
+          message: "SMTP-Konfiguration übersprungen" 
+        });
+      }
+
+      if (!smtpHost || !smtpPort || !smtpUser || !smtpPassword || !smtpFrom || !appUrl) {
+        return res.status(400).json({ error: "Alle SMTP-Felder sind erforderlich" });
+      }
+
+      await configureSmtp({
+        smtpHost,
+        smtpPort: parseInt(smtpPort),
+        smtpUser,
+        smtpPassword,
+        smtpFrom,
+        appUrl,
+      });
+
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error configuring SMTP:", error);
+      res.status(500).json({ error: "Fehler beim Konfigurieren von SMTP" });
+    }
+  });
+
+  // System Settings Routes
+  app.get("/api/system-settings", authenticateJWT, requireAdmin, async (req: any, res) => {
+    try {
+      const settings = await storage.getSystemSettings();
+      res.json(settings || {});
+    } catch (error) {
+      console.error("Error fetching system settings:", error);
+      res.status(500).json({ error: "Failed to fetch system settings" });
+    }
+  });
+
+  app.post("/api/system-settings", authenticateJWT, requireAdmin, async (req: any, res) => {
+    try {
+      const { smtpHost, smtpPort, smtpUser, smtpPassword, smtpFrom, appUrl } = req.body;
+
+      await storage.updateSystemSettings({
+        smtpHost,
+        smtpPort,
+        smtpUser,
+        smtpPassword,
+        smtpFrom,
+        appUrl,
+      });
+
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error updating system settings:", error);
+      res.status(500).json({ error: "Failed to update system settings" });
+    }
+  });
+
   // Branding Settings Routes
   app.get("/api/branding", async (req, res) => {
     try {
@@ -134,10 +248,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!name || !password) {
         return res
           .status(400)
-          .json({ error: "Name und Passwort sind erforderlich" });
+          .json({ error: "Name/E-Mail und Passwort sind erforderlich" });
       }
 
-      const user = await storage.getUserByName(name);
+      // Try to find user by name or email
+      let user = await storage.getUserByName(name);
+
+      // If not found by name, try email
+      if (!user && name.includes('@')) {
+        user = await storage.getUserByEmail(name.toLowerCase());
+      }
 
       if (!user) {
         return res.status(401).json({ error: "Ungültige Anmeldedaten" });
@@ -153,7 +273,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { generateToken } = await import("./auth");
       const token = generateToken({
         userId: user.id,
-        name: user.name,
+        email: user.email,
         role: user.role,
       });
 
@@ -238,6 +358,94 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.json({ message: "Name erfolgreich geändert" });
   });
 
+  // Forgot password endpoint
+  app.post("/api/auth/forgot-password", async (req, res) => {
+    try {
+      const { email } = req.body;
+
+      if (!email) {
+        return res.status(400).json({ error: "E-Mail ist erforderlich" });
+      }
+
+      // Find user by email (case-insensitive)
+      const user = await storage.getUserByEmail(email.toLowerCase());
+      
+      // Aus Sicherheitsgründen immer erfolgreiche Antwort zurückgeben,
+      // auch wenn die E-Mail nicht existiert (verhindert E-Mail-Enumeration)
+      if (!user) {
+        return res.json({ 
+          message: "Falls diese E-Mail registriert ist, wurde ein Reset-Link gesendet" 
+        });
+      }
+
+      // Generiere einen sicheren, zufälligen Token
+      const resetToken = crypto.randomBytes(32).toString('hex');
+      
+      // Token ist 1 Stunde gültig
+      const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
+
+      // Speichere den Token in der Datenbank
+      await storage.createPasswordResetToken(user.id, resetToken, expiresAt);
+
+      // Sende die E-Mail
+      const emailSent = await sendPasswordResetEmail(user.email, resetToken, user.name);
+
+      if (!emailSent) {
+        console.error('Failed to send password reset email to:', user.email);
+        // Trotzdem erfolgreiche Antwort (aus Sicherheitsgründen)
+      }
+
+      res.json({ 
+        message: "Falls diese E-Mail registriert ist, wurde ein Reset-Link gesendet" 
+      });
+    } catch (error) {
+      console.error("Forgot password error:", error);
+      res.status(500).json({ error: "Fehler beim Senden des Reset-Links" });
+    }
+  });
+
+  // Reset password with token endpoint
+  app.post("/api/auth/reset-password", async (req, res) => {
+    try {
+      const { token, newPassword } = req.body;
+
+      if (!token || !newPassword) {
+        return res.status(400).json({ error: "Token und neues Passwort sind erforderlich" });
+      }
+
+      if (newPassword.length < 6) {
+        return res.status(400).json({ error: "Passwort muss mindestens 6 Zeichen lang sein" });
+      }
+
+      // Suche den Token in der Datenbank
+      const resetToken = await storage.getPasswordResetToken(token);
+
+      if (!resetToken) {
+        return res.status(400).json({ error: "Ungültiger oder abgelaufener Reset-Link" });
+      }
+
+      // Prüfe, ob der Token abgelaufen ist
+      if (new Date() > new Date(resetToken.expiresAt)) {
+        await storage.deletePasswordResetToken(token);
+        return res.status(400).json({ error: "Reset-Link ist abgelaufen" });
+      }
+
+      // Hash das neue Passwort
+      const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+      // Update das Passwort
+      await storage.updateUserPassword(resetToken.userId, hashedPassword);
+
+      // Lösche den verwendeten Token
+      await storage.deletePasswordResetToken(token);
+
+      res.json({ message: "Passwort erfolgreich geändert" });
+    } catch (error) {
+      console.error("Reset password error:", error);
+      res.status(500).json({ error: "Fehler beim Zurücksetzen des Passworts" });
+    }
+  });
+
   // Get all users (for assignment selection)
   app.get(
     "/api/users",
@@ -260,10 +468,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Create user (Admin only)
   app.post("/api/users", authenticateJWT, requireAdmin, async (req, res) => {
-    const { name, password, role } = req.body;
+    const { name, email, password, role } = req.body;
 
-    if (!name || !password) {
-      return res.status(400).json({ error: "Name und Passwort sind erforderlich" });
+    if (!name || !email || !password) {
+      return res.status(400).json({ error: "Name, E-Mail und Passwort sind erforderlich" });
     }
 
     const existingUser = await storage.getUserByName(name);
@@ -271,9 +479,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.status(400).json({ error: "Name wird bereits verwendet" });
     }
 
+    const existingEmail = await storage.getUserByEmail(email.toLowerCase());
+    if (existingEmail) {
+      return res.status(400).json({ error: "E-Mail wird bereits verwendet" });
+    }
+
     const hashedPassword = await bcrypt.hash(password, 10);
     const user = await storage.createUser({
       name,
+      email: email.toLowerCase(),
       password: hashedPassword,
       role: role || "User",
     });
@@ -286,7 +500,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Update user (Admin only)
   app.put("/api/users/:id", authenticateJWT, requireAdmin, async (req, res) => {
     const { id } = req.params;
-    const { name, password, role } = req.body;
+    const { name, email, password, role } = req.body;
 
     const user = await storage.getUser(id);
     if (!user) {
@@ -295,6 +509,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
     // Trim all string fields
     const trimmedName = name?.trim();
+    const trimmedEmail = email?.trim().toLowerCase();
     const trimmedPassword = password?.trim();
 
     // Check if name is already taken by another user
@@ -305,8 +520,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
     }
 
+    // Check if email is already taken by another user
+    if (trimmedEmail && trimmedEmail !== user.email) {
+      const existingEmail = await storage.getUserByEmail(trimmedEmail);
+      if (existingEmail && existingEmail.id !== id) {
+        return res.status(400).json({ error: "E-Mail wird bereits verwendet" });
+      }
+    }
+
     const updates: any = {};
     if (trimmedName) updates.name = trimmedName;
+    if (trimmedEmail) updates.email = trimmedEmail;
     if (role) updates.role = role;
 
     // Only hash and update password if it's provided AND not empty
@@ -345,10 +569,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const userData = insertUserSchema.parse(req.body);
 
-      // Check if user already exists
-      const existingUser = await storage.getUserByEmail(userData.email);
-      if (existingUser) {
-        return res.status(409).json({ error: "Benutzer existiert bereits" });
+      // Normalize email to lowercase
+      userData.email = userData.email.toLowerCase();
+
+      // Check if user already exists by email (case-insensitive)
+      const existingUserByEmail = await storage.getUserByEmail(userData.email);
+      if (existingUserByEmail) {
+        return res.status(409).json({ error: "Benutzer mit dieser E-Mail existiert bereits" });
+      }
+
+      // Check if username already exists
+      const existingUserByName = await storage.getUserByName(userData.name);
+      if (existingUserByName) {
+        return res.status(409).json({ error: "Benutzername bereits vergeben" });
       }
 
       const user = await storage.createUser(userData);
@@ -362,6 +595,44 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       console.error("Registration error:", error);
       res.status(500).json({ error: "Registrierungsfehler" });
+    }
+  });
+
+  // Public sub-galleries route (no auth required)
+  app.get("/api/gallery/:galleryId/sub-galleries/public", async (req, res) => {
+    try {
+      const { galleryId } = req.params;
+
+      // Get parent gallery info
+      const parentGallery = await storage.getGallery(galleryId);
+      if (!parentGallery) {
+        return res.status(404).json({ error: "Galerie nicht gefunden" });
+      }
+
+      // Check if parent gallery has password protection
+      if (parentGallery.password) {
+        return res.status(403).json({ error: "Galerie ist passwortgeschützt" });
+      }
+
+      // Get sub-galleries
+      const subGalleries = await storage.getSubGalleriesByParentId(galleryId);
+
+      // Add photo count for each sub-gallery
+      const subGalleriesWithPhotoCounts = await Promise.all(
+        subGalleries.map(async (gallery) => {
+          const photos = await storage.getPhotosByGalleryId(gallery.id);
+          return {
+            ...gallery,
+            photoCount: photos.length,
+            lastModified: gallery.createdAt,
+          };
+        }),
+      );
+
+      res.json(subGalleriesWithPhotoCounts);
+    } catch (error) {
+      console.error("Get public sub-galleries error:", error);
+      res.status(500).json({ error: "Fehler beim Laden der Sub-Galerien" });
     }
   });
 
@@ -448,11 +719,271 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Public batch rating endpoint (no auth required) - MUST be before parametrized route
+  app.post("/api/public/photos/batch/rating", async (req, res) => {
+    try {
+      const { photoIds, rating, userName } = req.body;
+
+      if (!photoIds || !Array.isArray(photoIds) || photoIds.length === 0) {
+        return res.status(400).json({ error: "Photo-IDs sind erforderlich" });
+      }
+
+      if (typeof rating !== "number" || rating < 0 || rating > 5) {
+        return res
+          .status(400)
+          .json({ error: "Rating muss zwischen 0 und 5 sein" });
+      }
+
+      await storage.setPhotosRating(photoIds, rating);
+
+      // Get updated photos data
+      const updatedPhotos = [];
+      for (const photoId of photoIds) {
+        const photo = await storage.getPhoto(photoId);
+        if (photo) {
+          updatedPhotos.push({
+            id: photo.id,
+            rating: photo.rating || 0,
+          });
+        }
+      }
+
+      // Create batch notification if multiple photos are rated
+      if (photoIds.length > 1) {
+        const firstPhoto = await storage.getPhoto(photoIds[0]);
+        const gallery = firstPhoto
+          ? await storage.getGallery(firstPhoto.galleryId)
+          : null;
+
+        if (firstPhoto && gallery?.userId) {
+          const firstPhotoName = firstPhoto.alt || firstPhoto.filename;
+          const otherCount = photoIds.length - 1;
+          const starText = rating === 1 ? "Stern" : "Sterne";
+          const actorName = userName || "Anonymer Besucher";
+          const actorText = userName || "Jemand";
+
+          const message = `${actorText} hat Bild "${firstPhotoName}" und ${otherCount} weitere mit ${rating} ${starText} bewertet`;
+
+          storage
+            .createNotification({
+              userId: gallery.userId,
+              galleryId: gallery.id,
+              photoId: firstPhoto.id,
+              type: "rating",
+              message,
+              actorName,
+              isRead: false,
+            })
+            .catch((error) =>
+              console.error("Error creating batch notification:", error),
+            );
+        }
+      }
+
+      res.json({
+        success: true,
+        message: `${photoIds.length} Fotos bewertet`,
+        photos: updatedPhotos,
+      });
+    } catch (error) {
+      console.error("Public batch rating error:", error);
+      res.status(500).json({ error: "Fehler beim Setzen der Bewertungen" });
+    }
+  });
+
+  // Public rating endpoint (no auth required)
+  app.post("/api/public/photos/:photoId/rating", async (req, res) => {
+    try {
+      const { photoId } = req.params;
+      const { rating, userName } = req.body;
+
+      if (typeof rating !== "number" || rating < 0 || rating > 5) {
+        return res
+          .status(400)
+          .json({ error: "Rating muss zwischen 0 und 5 sein" });
+      }
+
+      const success = await storage.setPhotoRating(photoId, rating);
+      if (!success) {
+        return res.status(404).json({ error: "Foto nicht gefunden" });
+      }
+
+      // Get updated photo data
+      const updatedPhoto = await storage.getPhoto(photoId);
+      if (!updatedPhoto) {
+        return res.status(404).json({ error: "Foto nicht gefunden" });
+      }
+
+      // Create notification asynchronously
+      const gallery = await storage.getGallery(updatedPhoto.galleryId);
+
+      if (gallery?.userId) {
+        const actorName = userName || "Anonymer Besucher";
+        const actorText = userName || "Jemand";
+        const message = `${actorText} hat Bild "${updatedPhoto.alt}" in Galerie "${gallery.name}" mit ${rating} Stern${rating !== 1 ? "en" : ""} bewertet`;
+
+        storage
+          .createNotification({
+            userId: gallery.userId,
+            galleryId: gallery.id,
+            photoId,
+            type: "rating",
+            message,
+            actorName,
+            isRead: false,
+          })
+          .catch((error) =>
+            console.error("Error creating notification:", error),
+          );
+      }
+
+      res.json({
+        success: true,
+        photo: {
+          id: updatedPhoto.id,
+          rating: updatedPhoto.rating || 0,
+        },
+      });
+    } catch (error) {
+      console.error("Public rating error:", error);
+      res.status(500).json({ error: "Fehler beim Setzen der Bewertung" });
+    }
+  });
+
+  // Public like endpoint (no auth required)
+  app.post("/api/public/photos/:photoId/like", async (req, res) => {
+    try {
+      const { isLiked, userName } = req.body;
+      const { photoId } = req.params;
+
+      if (typeof isLiked !== "boolean") {
+        return res
+          .status(400)
+          .json({ error: "isLiked muss ein Boolean sein" });
+      }
+
+      const like = await storage.togglePhotoLike(photoId, isLiked);
+
+      // Get updated like status
+      const allLikes = await storage.getAllPhotoLikes(photoId);
+      const likeCount = allLikes.filter((like) => like.isLiked).length;
+      const dislikeCount = allLikes.filter((like) => !like.isLiked).length;
+      const currentStatus = likeCount > dislikeCount;
+
+      // Create notification asynchronously
+      const photo = await storage.getPhoto(photoId);
+      const gallery = photo
+        ? await storage.getGallery(photo.galleryId)
+        : null;
+
+      if (photo && gallery?.userId) {
+        const action = isLiked ? "geliked" : "entliked";
+        const actorName = userName || "Anonymer Besucher";
+        const actorText = userName || "Jemand";
+        const message = `${actorText} hat Bild "${photo.alt}" in Galerie "${gallery.name}" ${action}`;
+
+        storage
+          .createNotification({
+            userId: gallery.userId,
+            galleryId: gallery.id,
+            photoId,
+            type: "like",
+            message,
+            actorName,
+            isRead: false,
+          })
+          .catch((error) =>
+            console.error("Error creating notification:", error),
+          );
+      }
+
+      res.json({
+        success: true,
+        photo: {
+          id: photoId,
+          isLiked: currentStatus,
+          likeCount: likeCount,
+        },
+      });
+    } catch (error) {
+      console.error("Public like error:", error);
+      res.status(500).json({ error: "Fehler beim Speichern des Likes" });
+    }
+  });
+
+  // Public comment endpoint (no auth required)
+  app.post("/api/public/photos/:photoId/comments", async (req, res) => {
+    try {
+      const { commenterName, text } = req.body;
+      const { photoId } = req.params;
+
+      if (!commenterName || !text) {
+        return res
+          .status(400)
+          .json({ error: "Name und Text sind erforderlich" });
+      }
+
+      const commentId = await storage.addComment(
+        photoId,
+        commenterName,
+        text,
+      );
+
+      // Create comment notification for gallery owner
+      try {
+        const photo = await storage.getPhoto(photoId);
+        const gallery = photo
+          ? await storage.getGallery(photo.galleryId)
+          : null;
+
+        if (photo && gallery?.userId) {
+          const message = `${commenterName} hat einen Kommentar zu Bild "${photo.alt}" in Galerie "${gallery.name}" hinterlassen`;
+
+          const notification = await storage.createNotification({
+            userId: gallery.userId,
+            galleryId: gallery.id,
+            photoId,
+            type: "comment",
+            message,
+            actorName: commenterName,
+            isRead: false,
+          });
+        }
+      } catch (notificationError) {
+        console.error(
+          "Error creating comment notification:",
+          notificationError,
+        );
+      }
+
+      res.status(201).json({ success: true, commentId });
+    } catch (error) {
+      console.error("Public comment error:", error);
+      res.status(500).json({ error: "Fehler beim Erstellen des Kommentars" });
+    }
+  });
+
   // Gallery routes
   app.get("/api/galleries", authenticateJWT, async (req: any, res) => {
     try {
       const userId = req.user.userId; // Get userId from JWT token
-      const galleriesData = await storage.getMainGalleriesByUserId(userId);
+      
+      // Get galleries owned by user
+      const ownedGalleries = await storage.getMainGalleriesByUserId(userId);
+      
+      // Get galleries assigned to user
+      const assignedGalleries = await storage.getUserAssignedGalleries(userId);
+      
+      // Filter assigned galleries to only include main galleries (no parent)
+      const assignedMainGalleries = assignedGalleries.filter(g => !g.parentId);
+      
+      // Merge and deduplicate galleries
+      const allGalleriesMap = new Map();
+      [...ownedGalleries, ...assignedMainGalleries].forEach(gallery => {
+        allGalleriesMap.set(gallery.id, gallery);
+      });
+      
+      const galleriesData = Array.from(allGalleriesMap.values());
 
       // Add photo count and last modified date for each gallery
       const galleriesWithDetails = await Promise.all(
@@ -517,12 +1048,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
     },
   );
 
-  app.get("/api/galleries/:id", async (req, res) => {
+  app.get("/api/galleries/:id", authenticateJWT, async (req: any, res) => {
     try {
       const gallery = await storage.getGallery(req.params.id);
       if (!gallery) {
         return res.status(404).json({ error: "Galerie nicht gefunden" });
       }
+
+      // Check if user has access to this gallery
+      const userId = req.user.userId;
+
+      // For sub-galleries, check access based on parent gallery
+      let checkGallery = gallery;
+      if (gallery.parentId) {
+        const parentGallery = await storage.getGallery(gallery.parentId);
+        if (parentGallery) {
+          checkGallery = parentGallery;
+        }
+      }
+
+      // Check if user is the owner of the (parent) gallery
+      const isOwner = checkGallery.userId === userId;
+      
+      if (!isOwner) {
+        // Check if (parent) gallery is assigned to user
+        const assignments = await storage.getGalleryAssignments(checkGallery.id);
+        const isAssigned = assignments.some((a: any) => a.userId === userId);
+        
+        if (!isAssigned) {
+          return res.status(404).json({ error: "Galerie nicht gefunden" });
+        }
+      }
+
       res.json(gallery);
     } catch (error) {
       console.error("Get gallery error:", error);
@@ -533,7 +1090,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post(
     "/api/galleries",
     authenticateJWT,
-    requireAdmin,
+    requireAdminOrCreator,
     async (req: any, res) => {
       try {
         const galleryData = insertGallerySchema.parse(req.body);
@@ -564,7 +1121,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.put(
     "/api/galleries/:id",
     authenticateJWT,
-    requireAdmin,
+    requireAdminOrCreator,
     async (req: any, res) => {
       try {
         const updates = insertGallerySchema.partial().parse(req.body);
@@ -598,7 +1155,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.patch(
     "/api/galleries/:id/rename",
     authenticateJWT,
-    requireAdmin,
+    requireAdminOrCreator,
     async (req: any, res) => {
       try {
         const { name } = req.body;
@@ -622,11 +1179,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
     },
   );
 
+  // Get gallery password endpoint
+  app.get(
+    "/api/galleries/:id/password",
+    authenticateJWT,
+    requireAdminOrCreator,
+    async (req: any, res) => {
+      try {
+        const gallery = await storage.getGallery(req.params.id);
+        if (!gallery) {
+          return res.status(404).json({ error: "Galerie nicht gefunden" });
+        }
+        
+        // Return the password (it's hashed, but we can't decrypt it)
+        // For display purposes, we'll return a placeholder if password exists
+        res.json({ 
+          password: gallery.password ? "••••••••" : "",
+          hasPassword: !!gallery.password
+        });
+      } catch (error) {
+        console.error("Get password error:", error);
+        res.status(500).json({ error: "Fehler beim Laden des Passworts" });
+      }
+    },
+  );
+
   // Change password endpoint
   app.patch(
     "/api/galleries/:id/password",
     authenticateJWT,
-    requireAdmin,
+    requireAdminOrCreator,
     async (req: any, res) => {
       try {
         const { password } = req.body;
@@ -651,10 +1233,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
     },
   );
 
+  // Update download settings endpoint
+  app.patch(
+    "/api/galleries/:id/download-settings",
+    authenticateJWT,
+    requireAdminOrCreator,
+    async (req: any, res) => {
+      try {
+        const { allowDownload } = req.body;
+
+        if (typeof allowDownload !== "boolean") {
+          return res.status(400).json({ error: "allowDownload muss ein Boolean sein" });
+        }
+
+        const gallery = await storage.updateGallery(req.params.id, {
+          allowDownload,
+        });
+        if (!gallery) {
+          return res.status(404).json({ error: "Galerie nicht gefunden" });
+        }
+        res.json(gallery);
+      } catch (error) {
+        console.error("Update download settings error:", error);
+        res.status(500).json({ error: "Fehler beim Aktualisieren der Download-Einstellungen" });
+      }
+    },
+  );
+
   app.delete(
     "/api/galleries/:id",
     authenticateJWT,
-    requireAdmin,
+    requireAdminOrCreator,
     async (req: any, res) => {
       try {
         // Get all photos before deleting from database
@@ -665,14 +1274,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return res.status(404).json({ error: "Galerie nicht gefunden" });
         }
 
-        // Delete physical files
+        // Delete physical files including thumbnails
         for (const photo of photos) {
+          // Delete original file
           const filePath =
             photo.filePath ||
             `uploads/galleries/${photo.galleryId}/${photo.filename}`;
           if (fs.existsSync(filePath)) {
             fs.unlinkSync(filePath);
           }
+
+          // Delete thumbnails using ThumbnailGenerator
+          await ThumbnailGenerator.deleteThumbnails(
+            photo.filename,
+            photo.galleryId,
+          );
         }
 
         // Try to remove the gallery directory if it's empty
@@ -685,6 +1301,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
         }
 
+        // Try to remove the thumbnails directory for this gallery
+        const thumbnailsDir = `uploads/galleries/thumbnails/${req.params.id}`;
+        if (fs.existsSync(thumbnailsDir)) {
+          try {
+            fs.rmSync(thumbnailsDir, { recursive: true, force: true });
+          } catch (error) {
+            console.log(`Could not remove thumbnails directory ${thumbnailsDir}:`, error);
+          }
+        }
+
         res.status(204).send();
       } catch (error) {
         console.error("Delete gallery error:", error);
@@ -694,9 +1320,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
   );
 
   // Sub-galleries route
-  app.get("/api/galleries/:parentId/sub-galleries", async (req, res) => {
+  app.get("/api/galleries/:parentId/sub-galleries", authenticateJWT, async (req: any, res) => {
     try {
       const { parentId } = req.params;
+      
+      // Check if user has access to parent gallery
+      const parentGallery = await storage.getGallery(parentId);
+      if (!parentGallery) {
+        return res.status(404).json({ error: "Parent gallery not found" });
+      }
+
+      const userId = req.user.userId;
+
+      // Check if user is the owner of parent gallery
+      const isOwner = parentGallery.userId === userId;
+      
+      if (!isOwner) {
+        // Check if parent gallery is assigned to user
+        const assignments = await storage.getGalleryAssignments(parentId);
+        const isAssigned = assignments.some((a: any) => a.userId === userId);
+        
+        if (!isAssigned) {
+          return res.status(404).json({ error: "Gallery not found" });
+        }
+      }
+
       const subGalleries = await storage.getSubGalleriesByParentId(parentId);
 
       // Add photo count for each sub-gallery
@@ -719,9 +1367,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Gallery preview image route
-  app.get("/api/galleries/:galleryId/preview", async (req, res) => {
+  app.get("/api/galleries/:galleryId/preview", authenticateJWT, async (req: any, res) => {
     try {
       const { galleryId } = req.params;
+      
+      // Check if user has access to this gallery
+      const gallery = await storage.getGallery(galleryId);
+      if (!gallery) {
+        return res.status(404).json({ error: "Gallery not found" });
+      }
+
+      const userId = req.user.userId;
+
+      // For sub-galleries, check access based on parent gallery
+      let checkGallery = gallery;
+      if (gallery.parentId) {
+        const parentGallery = await storage.getGallery(gallery.parentId);
+        if (parentGallery) {
+          checkGallery = parentGallery;
+        }
+      }
+
+      // Check if user is the owner of the (parent) gallery
+      const isOwner = checkGallery.userId === userId;
+      
+      if (!isOwner) {
+        // Check if (parent) gallery is assigned to user
+        const assignments = await storage.getGalleryAssignments(checkGallery.id);
+        const isAssigned = assignments.some((a: any) => a.userId === userId);
+        
+        if (!isAssigned) {
+          return res.status(404).json({ error: "Gallery not found" });
+        }
+      }
+
       const photos = await storage.getPhotosByGalleryId(galleryId);
 
       if (photos.length === 0) {
@@ -754,6 +1433,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         if (!gallery) {
           return res.status(404).json({ error: "Gallery not found" });
+        }
+
+        // Check if user has access to this gallery
+        const userId = req.user.userId;
+
+        // For sub-galleries, check access based on parent gallery
+        let checkGallery = gallery;
+        if (gallery.parentId) {
+          const parentGallery = await storage.getGallery(gallery.parentId);
+          if (parentGallery) {
+            checkGallery = parentGallery;
+          }
+        }
+
+        // Check if user is the owner of the (parent) gallery
+        const isOwner = checkGallery.userId === userId;
+        
+        if (!isOwner) {
+          // Check if (parent) gallery is assigned to user
+          const assignments = await storage.getGalleryAssignments(checkGallery.id);
+          const isAssigned = assignments.some((a: any) => a.userId === userId);
+          
+          if (!isAssigned) {
+            return res.status(404).json({ error: "Gallery not found" });
+          }
         }
 
         console.log(`Fetching photos for gallery ${galleryId}...`);
@@ -804,7 +1508,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post(
     "/api/galleries/:galleryId/photos/upload",
     authenticateJWT,
-    requireAdmin,
+    requireAdminOrCreator,
     (req: any, res) => {
       upload.single("photo")(req, res, async (err) => {
         if (err) {
@@ -853,7 +1557,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post(
     "/api/galleries/:galleryId/photos/upload-multiple",
     authenticateJWT,
-    requireAdmin,
+    requireAdminOrCreator,
     (req: any, res) => {
       upload.array("photos")(req, res, async (err) => {
         if (err) {
@@ -931,7 +1635,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete(
     "/api/photos/batch",
     authenticateJWT,
-    requireAdmin,
+    requireAdminOrCreator,
     async (req: any, res) => {
       try {
         const { photoIds } = req.body;
@@ -1003,7 +1707,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete(
     "/api/photos/:id",
     authenticateJWT,
-    requireAdmin,
+    requireAdminOrCreator,
     async (req: any, res) => {
       try {
         // Get photo info before deleting from database
@@ -1032,7 +1736,79 @@ export async function registerRoutes(app: Express): Promise<Server> {
     },
   );
 
-  // Download multiple photos as ZIP
+  // Public download endpoint (no auth required)
+  app.post("/api/public/photos/download", async (req, res) => {
+    try {
+      const { photoIds } = req.body;
+
+      if (!Array.isArray(photoIds) || photoIds.length === 0) {
+        return res.status(400).json({ error: "photoIds array is required" });
+      }
+
+      console.log(`Public download request for ${photoIds.length} photos`);
+
+      // Set headers for ZIP download
+      res.setHeader("Content-Type", "application/zip");
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="photos_${new Date().toISOString().split("T")[0]}.zip"`,
+      );
+
+      // Create ZIP archive
+      const archive = archiver("zip", {
+        zlib: { level: 9 }, // Maximum compression
+      });
+
+      // Pipe archive to response
+      archive.pipe(res);
+
+      let addedCount = 0;
+
+      for (const photoId of photoIds) {
+        try {
+          const photo = await storage.getPhoto(photoId);
+
+          if (photo) {
+            const filePath =
+              photo.filePath ||
+              `uploads/galleries/${photo.galleryId}/${photo.filename}`;
+
+            try {
+              // Check if file exists before adding to archive
+              await fs.promises.access(filePath, fs.constants.R_OK);
+              // Add file to archive with original filename or alt text
+              const archiveFilename = photo.alt || photo.filename;
+              archive.file(filePath, { name: archiveFilename });
+              addedCount++;
+            } catch (fileError) {
+              console.warn(`Could not access file ${filePath}:`, fileError);
+            }
+          } else {
+            console.warn(`Photo with ID ${photoId} not found.`);
+          }
+        } catch (photoError) {
+          console.error(`Error processing photo ${photoId}:`, photoError);
+        }
+      }
+
+      if (addedCount === 0) {
+        archive.finalize();
+        return res
+          .status(404)
+          .json({ error: "No photos found or accessible for download" });
+      }
+
+      console.log(`Adding ${addedCount} photos to ZIP archive`);
+
+      // Finalize the archive
+      archive.finalize();
+    } catch (error) {
+      console.error("Public download error:", error);
+      res.status(500).json({ error: "Failed to create download archive" });
+    }
+  });
+
+  // Download multiple photos as ZIP (authenticated)
   app.post("/api/photos/download", authenticateJWT, async (req: any, res) => {
     try {
       const { photoIds } = req.body;
@@ -1521,6 +2297,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
       } catch (error) {
         console.error("Get gallery assignments error:", error);
         res.status(500).json({ error: "Fehler beim Laden der Zuweisungen" });
+      }
+    },
+  );
+
+  // Get all gallery assignments (for all galleries and users)
+  app.get(
+    "/api/all-assignments",
+    authenticateJWT,
+    requireAdmin,
+    async (req: any, res) => {
+      try {
+        const assignments = await storage.getAllGalleryAssignments();
+        res.json(assignments);
+      } catch (error) {
+        console.error("Get all assignments error:", error);
+        res.status(500).json({ error: "Fehler beim Laden aller Zuweisungen" });
       }
     },
   );

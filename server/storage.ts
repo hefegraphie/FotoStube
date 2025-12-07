@@ -21,11 +21,12 @@ import {
   notifications,
   galleryAssignments,
   brandingSettings,
+  passwordResetTokens,
 } from "@shared/schema";
 import pg from "pg";
 const { Pool } = pg;
 import { drizzle } from "drizzle-orm/node-postgres";
-import { eq, and, asc, desc, isNull } from "drizzle-orm";
+import { eq, and, asc, desc, isNull, sql } from "drizzle-orm";
 import * as schema from "@shared/schema";
 
 // Database connection
@@ -42,6 +43,7 @@ export interface IStorage {
   // User methods
   getUser(id: string): Promise<User | undefined>;
   getUserByName(name: string): Promise<User | undefined>;
+  getUserByEmail(email: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
   updateUserPassword(userId: string, hashedPassword: string): Promise<boolean>;
   updateUserName(userId: string, newName: string): Promise<void>;
@@ -100,6 +102,12 @@ export interface IStorage {
   removeGalleryAssignment(galleryId: string, userId: string): Promise<boolean>;
   getAllUsers(): Promise<User[]>;
   getUserAssignedGalleries(userId: string): Promise<Gallery[]>;
+  getAllGalleryAssignments(): Promise<any[]>;
+
+  // Password Reset methods
+  createPasswordResetToken(userId: string, token: string, expiresAt: Date): Promise<any>;
+  getPasswordResetToken(token: string): Promise<any>;
+  deletePasswordResetToken(token: string): Promise<boolean>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -121,6 +129,15 @@ export class DatabaseStorage implements IStorage {
       .select()
       .from(users)
       .where(eq(users.name, name))
+      .limit(1);
+    return result[0];
+  }
+
+  async getUserByEmail(email: string): Promise<User | undefined> {
+    const result = await this.db
+      .select()
+      .from(users)
+      .where(sql`LOWER(${users.email}) = LOWER(${email})`)
       .limit(1);
     return result[0];
   }
@@ -579,17 +596,29 @@ export class DatabaseStorage implements IStorage {
 
   // Gallery Assignment methods
   async getGalleryAssignments(galleryId: string) {
-    const assignments = await this.db
+    const assignments = await db
       .select({
         id: galleryAssignments.id,
         userId: galleryAssignments.userId,
         galleryId: galleryAssignments.galleryId,
         userName: users.name,
-        createdAt: galleryAssignments.createdAt,
+        userEmail: users.email,
       })
       .from(galleryAssignments)
-      .innerJoin(users, eq(galleryAssignments.userId, users.id))
+      .leftJoin(users, eq(galleryAssignments.userId, users.id))
       .where(eq(galleryAssignments.galleryId, galleryId));
+
+    return assignments;
+  }
+
+  async getAllGalleryAssignments() {
+    const assignments = await db
+      .select({
+        id: galleryAssignments.id,
+        userId: galleryAssignments.userId,
+        galleryId: galleryAssignments.galleryId,
+      })
+      .from(galleryAssignments);
 
     return assignments;
   }
@@ -650,6 +679,55 @@ export class DatabaseStorage implements IStorage {
       .where(eq(galleryAssignments.userId, userId));
 
     return assigned.map((a) => a.gallery);
+  }
+
+  // Password Reset methods
+  async createPasswordResetToken(userId: string, token: string, expiresAt: Date) {
+    const result = await this.db
+      .insert(passwordResetTokens)
+      .values({ userId, token, expiresAt })
+      .returning();
+    return result[0];
+  }
+
+  async getPasswordResetToken(token: string) {
+    const result = await this.db
+      .select()
+      .from(passwordResetTokens)
+      .where(eq(passwordResetTokens.token, token))
+      .limit(1);
+    return result[0];
+  }
+
+  async deletePasswordResetToken(token: string): Promise<boolean> {
+    const result = await this.db
+      .delete(passwordResetTokens)
+      .where(eq(passwordResetTokens.token, token));
+    return result.rowCount !== null && result.rowCount > 0;
+  }
+
+  // System Settings methods
+  async getSystemSettings() {
+    const result = await this.db
+      .select()
+      .from(schema.systemSettings)
+      .limit(1);
+    return result[0];
+  }
+
+  async updateSystemSettings(settings: Partial<typeof schema.systemSettings.$inferInsert>) {
+    const existing = await this.getSystemSettings();
+
+    if (existing) {
+      await this.db
+        .update(schema.systemSettings)
+        .set({ ...settings, updatedAt: new Date() })
+        .where(eq(schema.systemSettings.id, existing.id));
+    } else {
+      await this.db
+        .insert(schema.systemSettings)
+        .values(settings);
+    }
   }
 }
 

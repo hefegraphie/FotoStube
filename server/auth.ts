@@ -72,6 +72,19 @@ export function requireAdmin(req: any, res: Response, next: NextFunction) {
   next();
 }
 
+// Middleware: Admin oder Creator-Zugriff
+export function requireAdminOrCreator(req: any, res: Response, next: NextFunction) {
+  if (!req.user) {
+    return res.status(401).json({ error: 'Nicht authentifiziert' });
+  }
+
+  if (req.user.role !== 'Admin' && req.user.role !== 'Creator') {
+    return res.status(403).json({ error: 'Keine Berechtigung - Admin- oder Creator-Rechte erforderlich' });
+  }
+
+  next();
+}
+
 // Middleware: Ownership prüfen (z.B. für Galerien)
 export async function requireGalleryOwnership(storage: any) {
   return async (req: any, res: Response, next: NextFunction) => {
