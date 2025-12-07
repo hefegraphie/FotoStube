@@ -49,6 +49,7 @@ export default function SelectionPanel({
   showFilters = true
 }: SelectionPanelProps) {
   const [showFilenamesDialog, setShowFilenamesDialog] = useState(false);
+  const [exportFormat, setExportFormat] = useState<'captureone' | 'lightroom'>('captureone');
   
   // Try to get user from auth context, but make it optional for public galleries
   let user = null;
@@ -59,7 +60,13 @@ export default function SelectionPanel({
     // Not in auth context (public gallery), user remains null
   }
 
-  const isAdmin = user?.role === "Admin";
+  const isDelete = user?.role === "Admin" || user?.role === "Creator";
+  
+  const getFormattedFilenames = () => {
+    return exportFormat === 'captureone' 
+      ? selectedPhotos.map(photo => photo.alt).join(' ')
+      : selectedPhotos.map(photo => photo.alt).join(', ');
+  };
   
   const copyToClipboard = () => {
     const filenames = selectedPhotos.map(photo => photo.alt).join(' ');
@@ -334,43 +341,61 @@ export default function SelectionPanel({
                 }
               </Button>
             )}
-            {onDeleteSelected && (
-              <Dialog open={showFilenamesDialog} onOpenChange={setShowFilenamesDialog}>
-                <DialogTrigger asChild>
-                  <Button
-                    variant="outline"
-                    className="w-full"
-                    data-testid="button-show-filenames"
-                  >
-                    Dateinamen anzeigen
-                  </Button>
-                </DialogTrigger>
-                <DialogContent className="sm:max-w-md">
-                  <DialogHeader>
-                    <DialogTitle>Dateinamen der ausgewählten Bilder</DialogTitle>
-                  </DialogHeader>
-                  <div className="space-y-4">
-                    <Textarea
-                      value={selectedPhotos.map(photo => photo.alt).join(' ')}
-                      readOnly
-                      className="min-h-[120px] resize-none"
-                      data-testid="filenames-textarea"
-                    />
-                    <div className="flex justify-end">
-                      <Button
-                        onClick={copyToClipboard}
-                        className="flex items-center gap-2"
-                        data-testid="copy-filenames-button"
-                      >
-                        <Copy className="w-4 h-4" />
-                        In Zwischenablage kopieren
-                      </Button>
-                    </div>
+            <Dialog open={showFilenamesDialog} onOpenChange={setShowFilenamesDialog}>
+              <DialogTrigger asChild>
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  data-testid="button-show-filenames"
+                >
+                  Export
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="sm:max-w-md">
+                <DialogHeader>
+                  <DialogTitle>Dateinamen exportieren</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4">
+                  <div className="flex gap-2">
+                    <Button
+                      onClick={() => setExportFormat('captureone')}
+                      variant={exportFormat === 'captureone' ? 'default' : 'secondary'}
+                      className="flex-1"
+                      data-testid="format-captureone-button"
+                    >
+                      Capture One
+                    </Button>
+                    <Button
+                      onClick={() => setExportFormat('lightroom')}
+                      variant={exportFormat === 'lightroom' ? 'default' : 'secondary'}
+                      className="flex-1"
+                      data-testid="format-lightroom-button"
+                    >
+                      Lightroom
+                    </Button>
                   </div>
-                </DialogContent>
-              </Dialog>
-            )}
-            {onDeleteSelected && isAdmin && (
+
+                  <Textarea
+                    value={getFormattedFilenames()}
+                    readOnly
+                    className="min-h-[120px] resize-none"
+                    data-testid="filenames-textarea"
+                  />
+
+                  <Button
+                    onClick={() => {
+                      navigator.clipboard.writeText(getFormattedFilenames());
+                    }}
+                    className="w-full flex items-center gap-2"
+                    data-testid="copy-filenames-button"
+                  >
+                    <Copy className="w-4 h-4" />
+                    In Zwischenablage kopieren
+                  </Button>
+                </div>
+              </DialogContent>
+            </Dialog>
+            {onDeleteSelected && isDelete && (
               <Button
                 variant="destructive"
                 className="w-full"

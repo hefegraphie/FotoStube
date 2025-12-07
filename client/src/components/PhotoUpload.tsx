@@ -25,7 +25,7 @@ interface UploadFile {
 
 export default function PhotoUpload({ isOpen, onClose, galleryId, onUploadComplete }: PhotoUploadProps) {
   const { user } = useAuth();
-  const isAdmin = user?.role === "Admin";
+  const isAdminOrCreator = user?.role === "Admin" || user?.role === "Creator";
   const [uploadFiles, setUploadFiles] = useState<UploadFile[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);

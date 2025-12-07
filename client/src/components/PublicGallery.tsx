@@ -57,7 +57,6 @@ interface PublicGalleryData {
 function PublicGalleryContent() {
   const { galleryId } = useParams<{ galleryId: string }>();
   const navigate = useNavigate();
-  const [selectedPhotoIds, setSelectedPhotoIds] = useState<Set<string>>(new Set());
   const [filters, setFilters] = useState<FilterState>({
     showOnlyLiked: false,
     showOnlyRated: false,
@@ -70,7 +69,26 @@ function PublicGalleryContent() {
 
   const handleRatingChange = async (photoId: string, newRating: number) => {
     try {
-      await updatePhotoRating(photoId, newRating, 'Anonymer Besucher');
+      // Use public API endpoint instead of authenticated one
+      const response = await fetch(`/api/public/photos/${photoId}/rating`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ 
+          rating: newRating,
+          userName: 'Anonymer Besucher'
+        }),
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        // Update local state
+        const updatedPhotos = photos.map(p => 
+          p.id === photoId ? { ...p, rating: result.photo.rating } : p
+        );
+        setPhotos(updatedPhotos);
+      }
     } catch (error) {
       console.error('Error updating rating:', error);
     }
@@ -86,18 +104,10 @@ function PublicGalleryContent() {
   const { toast } = useToast();
 
 
-  // Remove redundant query - data is now managed by PhotoContext
+  const { photos, setPhotos, updatePhotoLike, updatePhotoRating, selectedPhotoIds, togglePhotoSelection, clearSelection } = usePhotos();
 
   const handleToggleSelection = (photoId: string) => {
-    setSelectedPhotoIds(prev => {
-      const newSet = new Set(prev);
-      if (newSet.has(photoId)) {
-        newSet.delete(photoId);
-      } else {
-        newSet.add(photoId);
-      }
-      return newSet;
-    });
+    togglePhotoSelection(photoId);
   };
 
   const handlePhotosChange = () => {
@@ -109,11 +119,28 @@ function PublicGalleryContent() {
     window.location.href = `/gallery/${subGalleryId}`;
   };
 
-  const { photos, setPhotos, updatePhotoLike, updatePhotoRating } = usePhotos();
-
   const handleLikeToggle = async (photoId: string, isLiked: boolean) => {
     try {
-      await updatePhotoLike(photoId, isLiked, 'Anonymer Besucher');
+      // Use public API endpoint instead of authenticated one
+      const response = await fetch(`/api/public/photos/${photoId}/like`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ 
+          isLiked,
+          userName: 'Anonymer Besucher'
+        }),
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        // Update local state
+        const updatedPhotos = photos.map(p => 
+          p.id === photoId ? { ...p, isLiked: result.photo.isLiked } : p
+        );
+        setPhotos(updatedPhotos);
+      }
     } catch (error) {
       console.error('Error toggling like:', error);
     }
@@ -213,7 +240,7 @@ function PublicGalleryContent() {
     const fetchGallery = async () => {
       setIsLoading(true);
       setPhotos([]); // Clear photos on new gallery load
-      
+
       try {
         // First get gallery info to check if it's a sub-gallery
         let galleryInfo;
@@ -361,15 +388,11 @@ function PublicGalleryContent() {
   const selectedPhotos = photos ? photos.filter(photo => selectedPhotoIds.has(photo.id)) : [];
 
   const handleClearSelection = () => {
-    setSelectedPhotoIds(new Set());
+    clearSelection();
   };
 
   const handleRemoveFromSelection = (photoId: string) => {
-    setSelectedPhotoIds(prev => {
-      const newSet = new Set(prev);
-      newSet.delete(photoId);
-      return newSet;
-    });
+    togglePhotoSelection(photoId);
   };
 
   const handleSelectAll = () => {
@@ -386,7 +409,7 @@ function PublicGalleryContent() {
       return true;
     });
     const filteredPhotoIds = filteredPhotos.map(photo => photo.id);
-    setSelectedPhotoIds(new Set(filteredPhotoIds));
+    filteredPhotoIds.forEach(id => togglePhotoSelection(id));
   };
 
   const handleDownloadSelectedPhotos = async () => {
@@ -407,7 +430,7 @@ function PublicGalleryContent() {
     });
 
     try {
-      const response = await fetch('/api/photos/download', {
+      const response = await fetch('/api/public/photos/download', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -496,7 +519,7 @@ function PublicGalleryContent() {
     });
 
     try {
-      const response = await fetch('/api/photos/download', {
+      const response = await fetch('/api/public/photos/download', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -594,14 +617,16 @@ function PublicGalleryContent() {
     setPhotos(optimisticPhotos);
 
     try {
-      const response = await fetch('/api/photos/batch/rating', {
+      // Use public API endpoint instead of authenticated one
+      const response = await fetch('/api/public/photos/batch/rating', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
           photoIds,
-          rating
+          rating,
+          userName: 'Anonymer Besucher'
         }),
       });
 
@@ -665,37 +690,29 @@ function PublicGalleryContent() {
       <LoadingOverlay isVisible={isBatchRating} message="Bilder werden bewertet..." />
 
       <div className="flex-1 p-4 md:p-6 space-y-4 md:space-y-6 overflow-y-auto">
-        <Card className="p-4 md:p-6">
-          <div className="flex items-start justify-between">
-            <div className="flex-1">
-              <h1 className="text-2xl md:text-3xl font-semibold mb-2">
-                {gallery?.name}
-              </h1>
-              <p className="text-muted-foreground">
-                {photos.length} Foto{photos.length !== 1 ? 's' : ''} •
-                Erstellt am {gallery?.createdAt ? new Date(gallery.createdAt).toLocaleDateString('de-DE') : ''}
-              </p>
-            </div>
-            <Button
-              variant="default"
-              size="icon"
-              className="md:hidden shadow-lg bg-primary hover:bg-primary/90"
-              onClick={() => {
-                const event = new CustomEvent('toggleSelectionPanel');
-                window.dispatchEvent(event);
-              }}
-              data-testid="toggle-selection-panel"
-            >
-              <Menu className="w-4 h-4" />
-            </Button>
-          </div>
-        </Card>
+        <div className="flex items-center justify-between">
+          <h1 className="text-xl md:text-2xl font-medium">
+            {gallery?.name}
+          </h1>
+          <Button
+            variant="default"
+            size="icon"
+            className="md:hidden shadow-lg bg-primary hover:bg-primary/90"
+            onClick={() => {
+              const event = new CustomEvent('toggleSelectionPanel');
+              window.dispatchEvent(event);
+            }}
+            data-testid="toggle-selection-panel"
+          >
+            <Menu className="w-4 h-4" />
+          </Button>
+        </div>
 
         <Breadcrumb items={
           gallery?.parentId
             ? [
                 {
-                  label: 'Hey',
+                  label: 'Galerie',
                   onClick: () => {
                     window.location.href = `/gallery/${gallery.parentId}`;
                   }
@@ -703,7 +720,7 @@ function PublicGalleryContent() {
                 { label: gallery?.name || 'Galerie', onClick: () => {} }
               ]
             : [
-                { label: 'Hey', onClick: () => {} }
+                { label: 'Galerie', onClick: () => {} }
               ]
         } />
 
@@ -712,6 +729,7 @@ function PublicGalleryContent() {
             parentGalleryId={galleryId}
             onSelectSubGallery={handleSelectSubGallery}
             isSubGallery={false}
+            onClearSelection={handleClearSelection}
           />
         )}
 
@@ -739,8 +757,8 @@ function PublicGalleryContent() {
         onRatingChange={handleBatchRatingChange}
         onRemoveFromSelection={handleRemoveFromSelection}
         onSelectAll={handleSelectAll}
-        onDownloadSelected={handleDownloadSelectedPhotos}
-        onDownloadAll={handleDownloadAllPhotos}
+        onDownloadSelected={gallery?.allowDownload !== false ? handleDownloadSelectedPhotos : undefined}
+        onDownloadAll={gallery?.allowDownload !== false ? handleDownloadAllPhotos : undefined}
         filters={filters}
         onFiltersChange={setFilters}
         showFilters={true}

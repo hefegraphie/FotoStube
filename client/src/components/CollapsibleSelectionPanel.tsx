@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Menu, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import SelectionPanel from "./SelectionPanel";
+import { Download } from "lucide-react"; // Assuming Download icon is used
 
 // Define FilterState type if it's not globally available
 type FilterState = {
@@ -11,20 +12,22 @@ type FilterState = {
   maxStars: number;
 };
 
+// Define Photo type if it's not globally available
+type Photo = {
+  id: string;
+  src: string;
+  alt: string;
+  rating: number;
+};
+
 interface CollapsibleSelectionPanelProps {
-  selectedPhotos: Array<{
-    id: string;
-    src: string;
-    alt: string;
-    rating: number;
-  }>;
+  selectedPhotos: Photo[];
   onClearSelection: () => void;
   onRatingChange: (rating: number) => void;
   onRemoveFromSelection: (photoId: string) => void;
-  onDeleteSelected?: () => void;
   onSelectAll?: () => void;
   onDownloadSelected?: () => void;
-  onDownloadAll?: () => void; // Added prop
+  onDownloadAll?: () => void;
   filters?: FilterState;
   onFiltersChange?: (filters: FilterState) => void;
   showFilters?: boolean;
@@ -35,10 +38,9 @@ export default function CollapsibleSelectionPanel({
   onClearSelection,
   onRatingChange,
   onRemoveFromSelection,
-  onDeleteSelected,
   onSelectAll,
   onDownloadSelected,
-  onDownloadAll, // Added prop
+  onDownloadAll,
   filters,
   onFiltersChange,
   showFilters = true
@@ -74,10 +76,9 @@ export default function CollapsibleSelectionPanel({
           onClearSelection={onClearSelection}
           onRatingChange={onRatingChange}
           onRemoveFromSelection={onRemoveFromSelection}
-          onDeleteSelected={onDeleteSelected}
           onSelectAll={onSelectAll}
           onDownloadSelected={onDownloadSelected}
-          onDownloadAll={onDownloadAll} // Pass prop to SelectionPanel
+          onDownloadAll={onDownloadAll}
           filters={filters}
           onFiltersChange={onFiltersChange}
           showFilters={showFilters}
@@ -100,10 +101,9 @@ export default function CollapsibleSelectionPanel({
               onClearSelection={onClearSelection}
               onRatingChange={onRatingChange}
               onRemoveFromSelection={onRemoveFromSelection}
-              onDeleteSelected={onDeleteSelected}
               onSelectAll={onSelectAll}
               onDownloadSelected={onDownloadSelected}
-              onDownloadAll={onDownloadAll} // Pass prop to mobile SelectionPanel
+              onDownloadAll={onDownloadAll}
               filters={filters}
               onFiltersChange={onFiltersChange}
               showFilters={showFilters}

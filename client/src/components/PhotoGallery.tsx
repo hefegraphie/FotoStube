@@ -51,8 +51,8 @@ interface PhotoGalleryProps {
 
 export default function PhotoGallery({
   photos: initialPhotos, // Keep for compatibility but ignore
-  selectedPhotoIds,
-  onToggleSelection,
+  selectedPhotoIds: externalSelectedPhotoIds,
+  onToggleSelection: externalOnToggleSelection,
   onPhotosChange,
   isPublicView = false,
   authContext = null,
@@ -71,7 +71,13 @@ export default function PhotoGallery({
     updatePhotoRating,
     updatePhotoLike,
     addPhotoComment,
+    selectedPhotoIds: contextSelectedPhotoIds,
+    togglePhotoSelection,
   } = usePhotos();
+  
+  // Use context selection if available, otherwise use external
+  const selectedPhotoIds = externalSelectedPhotoIds || contextSelectedPhotoIds;
+  const handleToggleSelection = externalOnToggleSelection || togglePhotoSelection;
   // Try to get auth context, but don't fail if it's not available (for public galleries)
   let authUser = null;
   try {
@@ -82,7 +88,7 @@ export default function PhotoGallery({
   }
 
   const user = authContext?.user || authUser;
-  const isAdmin = user?.role === "Admin";
+  const isDelete  =user?.role === "Admin" || user?.role === "Creator";
   
   // Use shared photos as source of truth - ignore initialPhotos completely
   const galleryPhotos = sharedPhotos;
@@ -189,7 +195,7 @@ export default function PhotoGallery({
 
  
 
-  const showDeleteButton = !isPublicView && isAdmin;
+  const showDeleteButton = !isPublicView && isDelete;
 
   return (
     <div className="space-y-6">
@@ -216,7 +222,7 @@ export default function PhotoGallery({
             }
             onToggleLike={handleToggleLike}
             onRatingChange={handleRatingChange}
-            onToggleSelection={onToggleSelection}
+            onToggleSelection={handleToggleSelection}
             onDelete={showDeleteButton ? handleDeletePhoto : undefined}
           />
         ))}
