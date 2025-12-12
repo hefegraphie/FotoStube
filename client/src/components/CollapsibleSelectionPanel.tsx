@@ -25,6 +25,7 @@ interface CollapsibleSelectionPanelProps {
   onClearSelection: () => void;
   onRatingChange: (rating: number) => void;
   onRemoveFromSelection: (photoId: string) => void;
+  onDeleteSelected?: () => void;
   onSelectAll?: () => void;
   onDownloadSelected?: () => void;
   onDownloadAll?: () => void;
@@ -38,6 +39,7 @@ export default function CollapsibleSelectionPanel({
   onClearSelection,
   onRatingChange,
   onRemoveFromSelection,
+  onDeleteSelected,
   onSelectAll,
   onDownloadSelected,
   onDownloadAll,
@@ -76,6 +78,7 @@ export default function CollapsibleSelectionPanel({
           onClearSelection={onClearSelection}
           onRatingChange={onRatingChange}
           onRemoveFromSelection={onRemoveFromSelection}
+          onDeleteSelected={onDeleteSelected}
           onSelectAll={onSelectAll}
           onDownloadSelected={onDownloadSelected}
           onDownloadAll={onDownloadAll}
@@ -101,6 +104,7 @@ export default function CollapsibleSelectionPanel({
               onClearSelection={onClearSelection}
               onRatingChange={onRatingChange}
               onRemoveFromSelection={onRemoveFromSelection}
+              onDeleteSelected={onDeleteSelected}
               onSelectAll={onSelectAll}
               onDownloadSelected={onDownloadSelected}
               onDownloadAll={onDownloadAll}
