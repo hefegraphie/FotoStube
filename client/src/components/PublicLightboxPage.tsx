@@ -50,7 +50,26 @@ export default function PublicLightboxPage() {
   useEffect(() => {
     const fetchGalleryData = async () => {
       try {
-        const response = await fetch(`/api/gallery/${galleryId}/public`);
+        // Check for stored password
+        let storedPassword = null;
+        try {
+          storedPassword = localStorage.getItem(`gallery_access_${galleryId}`);
+        } catch (error) {
+          console.error('Error accessing localStorage:', error);
+        }
+
+        // Use POST with password if available, otherwise GET
+        const requestBody = storedPassword ? { password: storedPassword } : {};
+        const method = storedPassword ? 'POST' : 'GET';
+
+        const response = await fetch(`/api/gallery/${galleryId}/public`, {
+          method,
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: method === 'POST' ? JSON.stringify(requestBody) : undefined,
+        });
+
         if (response.ok) {
           const data = await response.json();
           setGallery(data.gallery);
@@ -72,6 +91,9 @@ export default function PublicLightboxPage() {
           setPhotos(transformedPhotos);
           const current = transformedPhotos.find((p: Photo) => p.id === photoId);
           setCurrentPhoto(current || null);
+        } else if (response.status === 403 || response.status === 401) {
+          // Password required or invalid - redirect back to gallery
+          navigate(`/gallery/${galleryId}`);
         }
       } catch (error) {
         console.error("Error fetching gallery:", error);
@@ -83,7 +105,7 @@ export default function PublicLightboxPage() {
     if (galleryId && photoId) {
       fetchGalleryData();
     }
-  }, [galleryId, photoId]);
+  }, [galleryId, photoId, navigate]);
 
   const handleClose = () => {
     navigate(decodeURIComponent(returnPath));
