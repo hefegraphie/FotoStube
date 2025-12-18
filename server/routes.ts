@@ -1776,8 +1776,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
             try {
               // Check if file exists before adding to archive
               await fs.promises.access(filePath, fs.constants.R_OK);
-              // Add file to archive with original filename or alt text
-              const archiveFilename = photo.alt || photo.filename;
+              
+              // Get file extension from filename
+              const extension = path.extname(photo.filename);
+              // Add file to archive with alt text + original extension
+              const archiveFilename = photo.alt + extension;
               archive.file(filePath, { name: archiveFilename });
               addedCount++;
             } catch (fileError) {
@@ -1848,8 +1851,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
             try {
               // Check if file exists before adding to archive
               await fs.promises.access(filePath, fs.constants.R_OK);
-              // Add file to archive with original filename or alt text
-              const archiveFilename = photo.alt || photo.filename;
+              
+              // Get file extension from filename
+              const extension = path.extname(photo.filename);
+              // Add file to archive with alt text + original extension
+              const archiveFilename = photo.alt + extension;
               archive.file(filePath, { name: archiveFilename });
               addedCount++;
             } catch (fileError) {
