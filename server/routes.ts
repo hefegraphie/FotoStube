@@ -1799,7 +1799,153 @@ export async function registerRoutes(app: Express): Promise<Server> {
     },
   );
 
-  // Public download endpoint (no auth required)
+  // In-memory cache for download tokens (expires after 5 minutes)
+  const downloadCache = new Map<string, { photoIds: string[], expiresAt: number }>();
+
+  // Cleanup expired tokens every minute
+  setInterval(() => {
+    const now = Date.now();
+    for (const [token, data] of downloadCache.entries()) {
+      if (data.expiresAt < now) {
+        downloadCache.delete(token);
+      }
+    }
+  }, 60000);
+
+  // Prepare download endpoint - returns download token
+  app.post("/api/photos/prepare-download", authenticateJWT, async (req: any, res) => {
+    try {
+      const { photoIds } = req.body;
+
+      if (!Array.isArray(photoIds) || photoIds.length === 0) {
+        return res.status(400).json({ error: "photoIds array is required" });
+      }
+
+      // Generate unique token
+      const token = crypto.randomBytes(32).toString("hex");
+      
+      // Store in cache with 5 minute expiration
+      downloadCache.set(token, {
+        photoIds,
+        expiresAt: Date.now() + 5 * 60 * 1000
+      });
+
+      res.json({ downloadUrl: `/api/download-zip/${token}` });
+    } catch (error) {
+      console.error("Prepare download error:", error);
+      res.status(500).json({ error: "Failed to prepare download" });
+    }
+  });
+
+  // Public prepare download endpoint (no auth required)
+  app.post("/api/public/photos/prepare-download", async (req, res) => {
+    try {
+      const { photoIds } = req.body;
+
+      if (!Array.isArray(photoIds) || photoIds.length === 0) {
+        return res.status(400).json({ error: "photoIds array is required" });
+      }
+
+      // Generate unique token
+      const token = crypto.randomBytes(32).toString("hex");
+      
+      // Store in cache with 5 minute expiration
+      downloadCache.set(token, {
+        photoIds,
+        expiresAt: Date.now() + 5 * 60 * 1000
+      });
+
+      res.json({ downloadUrl: `/api/download-zip/${token}` });
+    } catch (error) {
+      console.error("Prepare download error:", error);
+      res.status(500).json({ error: "Failed to prepare download" });
+    }
+  });
+
+  // Execute download with token
+  app.get("/api/download-zip/:token", async (req, res) => {
+    try {
+      const { token } = req.params;
+      
+      // Get photoIds from cache
+      const cacheEntry = downloadCache.get(token);
+      
+      if (!cacheEntry) {
+        return res.status(404).json({ error: "Download token expired or invalid" });
+      }
+
+      const { photoIds } = cacheEntry;
+      
+      // Delete token after use (one-time use)
+      downloadCache.delete(token);
+
+      console.log(`Download request for ${photoIds.length} photos`);
+
+      // Set headers for ZIP download
+      res.setHeader("Content-Type", "application/zip");
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="photos_${new Date().toISOString().split("T")[0]}.zip"`,
+      );
+
+      // Create ZIP archive
+      const archive = archiver("zip", {
+        zlib: { level: 9 }, // Maximum compression
+      });
+
+      // Pipe archive to response
+      archive.pipe(res);
+
+      let addedCount = 0;
+
+      for (const photoId of photoIds) {
+        try {
+          const photo = await storage.getPhoto(photoId);
+
+          if (photo) {
+            const filePath =
+              photo.filePath ||
+              `uploads/galleries/${photo.galleryId}/${photo.filename}`;
+
+            try {
+              // Check if file exists before adding to archive
+              await fs.promises.access(filePath, fs.constants.R_OK);
+
+              // Get file extension from filename
+              const extension = path.extname(photo.filename);
+              // Add file to archive with alt text + original extension
+              const archiveFilename = photo.alt + extension;
+              archive.file(filePath, { name: archiveFilename });
+              addedCount++;
+            } catch (fileError) {
+              console.warn(`Could not access file ${filePath}:`, fileError);
+            }
+          } else {
+            console.warn(`Photo with ID ${photoId} not found.`);
+          }
+        } catch (photoError) {
+          console.error(`Error processing photo ${photoId}:`, photoError);
+        }
+      }
+
+      if (addedCount === 0) {
+        archive.finalize();
+        return res
+          .status(404)
+          .json({ error: "No photos found or accessible for download" });
+      }
+
+      console.log(`Adding ${addedCount} photos to ZIP archive`);
+
+      // Finalize the archive
+      archive.finalize();
+    } catch (error) {
+      console.error("Download error:", error);
+      res.status(500).json({ error: "Failed to create download archive" });
+    }
+  });
+
+  // Public download endpoint (no auth required) - DEPRECATED, kept for backwards compatibility
   app.post("/api/public/photos/download", async (req, res) => {
     try {
       const { photoIds } = req.body;
@@ -1874,7 +2020,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Download multiple photos as ZIP (authenticated)
+  // Download multiple photos as ZIP (authenticated) - DEPRECATED, kept for backwards compatibility
   app.post("/api/photos/download", authenticateJWT, async (req: any, res) => {
     try {
       const { photoIds } = req.body;
