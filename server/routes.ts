@@ -1553,7 +1553,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     },
   );
 
-  // Multiple photo upload endpoint
+  // Multiple photo upload endpoint with SSE progress
   app.post(
     "/api/galleries/:galleryId/photos/upload-multiple",
     authenticateJWT,
@@ -1576,11 +1576,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const { alts } = req.body;
           const altTexts = JSON.parse(alts || "[]");
 
+          // Set headers for SSE (Server-Sent Events)
+          res.setHeader('Content-Type', 'text/event-stream');
+          res.setHeader('Cache-Control', 'no-cache');
+          res.setHeader('Connection', 'keep-alive');
+
           const uploadedPhotos = [];
+          const totalFiles = files.length;
 
           for (let i = 0; i < files.length; i++) {
             const file = files[i];
             const alt = altTexts[i] || file.originalname;
+
+            // Send progress update before thumbnail generation
+            const progress = Math.round(((i + 1) / totalFiles) * 100);
+            res.write(`data: ${JSON.stringify({ 
+              type: 'progress', 
+              progress, 
+              current: i + 1, 
+              total: totalFiles,
+              message: `Verarbeite Bild ${i + 1} von ${totalFiles}...`
+            })}\n\n`);
 
             // Generate thumbnails for each file
             const thumbnailPaths = await ThumbnailGenerator.generateThumbnails(
@@ -1603,10 +1619,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
             uploadedPhotos.push(photo);
           }
 
-          res.status(201).json({ photos: uploadedPhotos });
+          // Send completion event
+          res.write(`data: ${JSON.stringify({ 
+            type: 'complete', 
+            photos: uploadedPhotos 
+          })}\n\n`);
+          
+          res.end();
         } catch (error) {
           console.error("Upload multiple photos error:", error);
-          res.status(500).json({ error: "Fehler beim Hochladen der Fotos" });
+          res.write(`data: ${JSON.stringify({ 
+            type: 'error', 
+            error: 'Fehler beim Hochladen der Fotos' 
+          })}\n\n`);
+          res.end();
         }
       });
     },
