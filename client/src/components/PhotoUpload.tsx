@@ -88,34 +88,62 @@ export default function PhotoUpload({ isOpen, onClose, galleryId, onUploadComple
       });
       formData.append('alts', JSON.stringify(uploadFiles.map(f => f.alt)));
       formData.append('userId', user?.id || '');
-      // Create XMLHttpRequest to track progress
+      
+      // Create XMLHttpRequest to track upload progress
       const xhr = new XMLHttpRequest();
       
-      // Track upload progress
+      // Track network upload progress (0-50%)
       xhr.upload.addEventListener('progress', (event) => {
         if (event.lengthComputable) {
-          const percentComplete = Math.round((event.loaded / event.total) * 100);
-          setUploadProgress(percentComplete);
+          const uploadPercent = Math.round((event.loaded / event.total) * 50); // Upload is 0-50%
+          setUploadProgress(uploadPercent);
         }
       });
 
-      // Promise wrapper for XMLHttpRequest
+      // Promise wrapper for XMLHttpRequest with SSE handling
       const uploadPromise = new Promise((resolve, reject) => {
+        let buffer = '';
+        
+        xhr.onprogress = () => {
+          // Parse SSE data during processing (50-100%)
+          const newData = xhr.responseText.substring(buffer.length);
+          buffer = xhr.responseText;
+          
+          const lines = newData.split('\n');
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              try {
+                const data = JSON.parse(line.substring(6));
+                
+                if (data.type === 'progress') {
+                  // Map server progress (0-100%) to our range (50-100%)
+                  const processingPercent = 50 + Math.round(data.progress * 0.5);
+                  setUploadProgress(processingPercent);
+                } else if (data.type === 'complete') {
+                  resolve(data);
+                } else if (data.type === 'error') {
+                  reject(new Error(data.error || 'Upload fehlgeschlagen'));
+                }
+              } catch (e) {
+                console.error('Error parsing SSE data:', e);
+              }
+            }
+          }
+        };
+
         xhr.onload = () => {
           if (xhr.status >= 200 && xhr.status < 300) {
-            try {
-              const response = JSON.parse(xhr.responseText);
-              resolve(response);
-            } catch (e) {
-              reject(new Error('Invalid JSON response'));
+            // SSE might have already resolved via onprogress
+            // This is a fallback in case the complete event wasn't received
+            if (xhr.responseText && !buffer) {
+              try {
+                resolve({ photos: [] });
+              } catch (e) {
+                reject(new Error('Invalid response'));
+              }
             }
           } else {
-            try {
-              const errorData = JSON.parse(xhr.responseText);
-              reject(new Error(errorData.error || 'Upload fehlgeschlagen'));
-            } catch (e) {
-              reject(new Error('Upload fehlgeschlagen'));
-            }
+            reject(new Error('Upload fehlgeschlagen'));
           }
         };
 
