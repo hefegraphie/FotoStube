@@ -1,5 +1,5 @@
 import React, { useState, useEffect, Suspense, lazy } from "react";
-import { Routes, Route, useParams, useNavigate, Navigate } from "react-router-dom";
+import { Routes, Route, useParams, useNavigate, Navigate, useLocation } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useAuth, AuthProvider } from "./contexts/AuthContext";
@@ -131,12 +131,13 @@ function GalleriesOverview() {
 
 // Component for showing individual gallery
 function GalleryView() {
-  const { galleryId, parentId, grandParentId } = useParams<{
+  const { galleryId: currentGalleryId, parentId, grandParentId } = useParams<{
     galleryId: string;
     parentId?: string;
     grandParentId?: string;
   }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const { user, galleries } = useAuth();
 
 
@@ -149,6 +150,7 @@ function GalleryView() {
     updatePhotoLike,
     addPhotoComment,
     selectedPhotoIds,
+    setSelectedPhotoIds,
     togglePhotoSelection,
     clearSelection,
   } = usePhotos(); // Use context for photos
@@ -159,15 +161,15 @@ function GalleryView() {
 
   // Query for current gallery data
   const { data: currentGalleryData, isError: galleryError, error: galleryErrorData } = useQuery({
-    queryKey: ["gallery", galleryId],
+    queryKey: ["gallery", currentGalleryId],
     queryFn: async () => {
-      const response = await fetch(`/api/galleries/${galleryId}`);
+      const response = await fetch(`/api/galleries/${currentGalleryId}`);
       if (!response.ok) {
         throw new Error("Failed to fetch gallery");
       }
       return response.json();
     },
-    enabled: !!galleryId,
+    enabled: !!currentGalleryId,
     retry: false, // Don't retry on error
   });
 
@@ -188,12 +190,12 @@ function GalleryView() {
     isLoading: photosLoading,
     refetch,
   } = useQuery({
-    queryKey: ["/api/galleries", galleryId, "photos", user?.id],
-    enabled: !!galleryId && !!user?.id,
+    queryKey: ["/api/galleries", currentGalleryId, "photos", user?.id],
+    enabled: !!currentGalleryId && !!user?.id,
     queryFn: async () => {
       const token = localStorage.getItem('authToken');
       const response = await fetch(
-        `/api/galleries/${galleryId}/photos`,
+        `/api/galleries/${currentGalleryId}/photos`,
         {
           credentials: 'include',
           headers: {
@@ -402,10 +404,8 @@ function GalleryView() {
     });
 
     const filteredPhotoIds = filteredPhotos.map((photo) => photo.id);
-    // This should ideally be a function in the context to handle selecting all
-    // For now, directly update the context state if it's exposed, or dispatch an action
-    // Assuming togglePhotoSelection can handle adding multiple IDs or there's a selectAllPhotos function
-    filteredPhotoIds.forEach(id => togglePhotoSelection(id));
+    // Add all filtered photos to selection (merge with existing selection)
+    setSelectedPhotoIds(new Set([...selectedPhotoIds, ...filteredPhotoIds]));
   };
 
   const selectedPhotos = transformedPhotos.filter((photo) =>
@@ -418,18 +418,18 @@ function GalleryView() {
 
   const handleUploadComplete = () => {
     setShowUploadDialog(false);
-    if (galleryId) {
+    if (currentGalleryId) {
       queryClient.invalidateQueries({
-        queryKey: ["gallery-preview", galleryId],
+        queryKey: ["gallery-preview", currentGalleryId],
       });
       refetch(); // Refetch photos to show newly uploaded images immediately
     }
   };
 
   const handlePhotosChange = () => {
-    if (galleryId) {
+    if (currentGalleryId) {
       queryClient.invalidateQueries({
-        queryKey: ["/api/galleries", galleryId, "photos"],
+        queryKey: ["/api/galleries", currentGalleryId, "photos"],
       });
     }
   };
@@ -454,13 +454,63 @@ function GalleryView() {
       });
 
       if (response.ok) {
-        handleClearSelection(); // Use context function
-        refetch();
+        const result = await response.json();
+        console.log("Batch delete result:", result);
+
+        // Clear selection first
+        clearSelection();
+
+        // Force reload photos from server
+        const galleryId = currentGalleryId || location.pathname.split("/galleries/")[1]?.split("/")[0];
+        if (galleryId) {
+          try {
+            const photosResponse = await fetch(`/api/galleries/${galleryId}/photos`);
+            if (photosResponse.ok) {
+              const backendPhotos = await photosResponse.json();
+              const transformedPhotos = backendPhotos.map((photo: any) => ({
+                id: photo.id,
+                src: `/${photo.thumbnailPath || photo.filePath}`,
+                mediumSrc: photo.mediumPath ? `/${photo.mediumPath}` : undefined,
+                originalSrc: photo.filePath ? `/${photo.filePath}` : undefined,
+                alt: photo.alt,
+                rating: photo.rating || 0,
+                isLiked: photo.isLiked || false,
+                comments:
+                  photo.comments?.map((comment: any) => ({
+                    id: comment.id,
+                    author: comment.commenterName || comment.author,
+                    text: comment.text,
+                    timestamp:
+                      comment.timestamp ||
+                      new Date(comment.createdAt).toLocaleString("de-DE"),
+                  })) || [],
+              }));
+              setSharedPhotos(transformedPhotos);
+            }
+          } catch (error) {
+            console.error("Error reloading photos:", error);
+          }
+        }
+
+        toast({
+          title: "Fotos gelöscht",
+          description: `${result.deleted?.length || 0} Foto${result.deleted?.length > 1 ? "s" : ""} erfolgreich gelöscht`,
+        });
       } else {
         console.error("Failed to delete photos");
+        toast({
+          title: "Löschen fehlgeschlagen",
+          description: "Einige Fotos konnten nicht gelöscht werden.",
+          variant: "destructive",
+        });
       }
     } catch (error) {
       console.error("Error deleting photos:", error);
+      toast({
+        title: "Löschen fehlgeschlagen",
+        description: "Ein Fehler ist aufgetreten.",
+        variant: "destructive",
+      });
     }
   };
 
@@ -642,7 +692,7 @@ function GalleryView() {
 
     // Use currentGalleryData for current gallery, fallback to galleries array for parents
     const currentGallery =
-      currentGalleryData || galleries.find((g) => g.id === galleryId);
+      currentGalleryData || galleries.find((g) => g.id === currentGalleryId);
     const parentGallery = parentId
       ? galleries.find((g) => g.id === parentId)
       : null;
@@ -686,9 +736,9 @@ function GalleryView() {
   };
 
   const getCurrentGalleryName = () => {
-    if (!galleryId) return "";
+    if (!currentGalleryId) return "";
     const gallery =
-      currentGalleryData || galleries?.find((g) => g.id === galleryId);
+      currentGalleryData || galleries?.find((g) => g.id === currentGalleryId);
     return gallery?.name || "Unbekannte Galerie";
   };
 
@@ -710,10 +760,10 @@ function GalleryView() {
     if (galleryName) {
       document.title = `${galleryName} - ${companyName}`;
     }
-  }, [galleryId, currentGalleryData, companyName]);
+  }, [currentGalleryId, currentGalleryData, companyName]);
 
   // Early returns AFTER all hooks
-  if (!galleryId) {
+  if (!currentGalleryId) {
     navigate("/galleries");
     return null;
   }
@@ -721,7 +771,11 @@ function GalleryView() {
   // Show 404 page if gallery not found or access denied
   if (galleryError) {
     return (
-      <Suspense fallback={<div className="flex justify-center items-center h-screen"><p>Lädt...</p></div>}>
+      <Suspense fallback={
+        <div className="flex justify-center items-center h-screen">
+          <p>Lädt...</p>
+        </div>
+      }>
         <GalleryNotFound />
       </Suspense>
     );
@@ -786,21 +840,21 @@ function GalleryView() {
             <PhotoUpload
               isOpen={showUploadDialog}
               onClose={() => setShowUploadDialog(false)}
-              galleryId={galleryId}
+              galleryId={currentGalleryId}
               onUploadComplete={() => {
                 refetch();
                 queryClient.invalidateQueries({
-                  queryKey: ["gallery-preview", galleryId],
+                  queryKey: ["gallery-preview", currentGalleryId],
                 });
               }}
             />
 
             {/* Sub-Galleries */}
             <SubGalleries
-              parentGalleryId={galleryId}
+              parentGalleryId={currentGalleryId}
               onSelectSubGallery={(subGalleryId) => {
                 const currentGallery = galleries.find(
-                  (g) => g.id === galleryId,
+                  (g) => g.id === currentGalleryId,
                 );
                 if (currentGallery?.parentId) {
                   // We're in a sub-gallery, navigate to sub-sub-gallery
@@ -809,7 +863,7 @@ function GalleryView() {
                   );
                 } else {
                   // We're in a main gallery, navigate to sub-gallery
-                  navigate(`/galleries/${galleryId}/${subGalleryId}`);
+                  navigate(`/galleries/${currentGalleryId}/${subGalleryId}`);
                 }
               }}
               isSubGallery={!!parentId || !!grandParentId}
@@ -839,7 +893,7 @@ function GalleryView() {
           <PhotoUpload
             isOpen={showUploadDialog}
             onClose={() => setShowUploadDialog(false)}
-            galleryId={galleryId}
+            galleryId={currentGalleryId}
             onUploadComplete={handleUploadComplete}
           />
 
