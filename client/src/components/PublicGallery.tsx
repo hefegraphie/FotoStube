@@ -420,17 +420,13 @@ function PublicGalleryContent() {
     // Show preparation indicator
     const loadingToast = toast({
       title: "Download wird vorbereitet",
-      description: (
-        <div className="flex items-center space-x-2">
-          <div className="animate-spin rounded-full h-4 w-4 border-2 border-blue-500 border-t-transparent"></div>
-          <span>{photoIds.length} Foto{photoIds.length !== 1 ? 's' : ''} werden vorbereitet. Dies kann einige Sekunden dauern...</span>
-        </div>
-      ),
-      duration: Infinity, // Keep the toast open until explicitly dismissed
+      description: "Die Anfrage wird an den Server gesendet.",
+      duration: Infinity,
     });
 
     try {
-      const response = await fetch('/api/public/photos/download', {
+      // Step 1: Request download token
+      const response = await fetch('/api/public/photos/prepare-download', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -441,19 +437,12 @@ function PublicGalleryContent() {
       });
 
       if (response.ok) {
-        const blob = await response.blob();
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `photos_${new Date().toISOString().split('T')[0]}.zip`;
-        document.body.appendChild(a);
+        const data = await response.json();
+        
+        // Step 2: Let browser handle download natively
+        window.location.href = data.downloadUrl;
 
-        // Dismiss loading toast only when download dialog appears
         loadingToast.dismiss();
-        a.click();
-
-        window.URL.revokeObjectURL(url);
-        document.body.removeChild(a);
 
         // Create download notification
         if (gallery?.userId) {
@@ -478,12 +467,13 @@ function PublicGalleryContent() {
         }
 
         toast({
-          title: "Download erfolgreich",
-          description: `${photoIds.length} Foto${photoIds.length !== 1 ? 's' : ''} erfolgreich heruntergeladen.`,
+          title: "Download gestartet",
+          description: `Der Browser lädt ${photoIds.length} Foto${photoIds.length !== 1 ? 's' : ''} herunter.`,
+          duration: 3000,
         });
       } else {
         loadingToast.dismiss();
-        console.error('Failed to download photos');
+        console.error('Failed to prepare download');
         toast({
           title: "Fehler",
           description: "Download fehlgeschlagen. Bitte versuche es erneut.",
@@ -492,7 +482,7 @@ function PublicGalleryContent() {
       }
     } catch (error) {
       loadingToast.dismiss();
-      console.error('Error downloading photos:', error);
+      console.error('Error preparing download:', error);
       toast({
         title: "Fehler",
         description: "Download fehlgeschlagen. Bitte versuche es erneut.",
@@ -509,17 +499,13 @@ function PublicGalleryContent() {
     // Show preparation indicator
     const loadingToast = toast({
       title: "Download wird vorbereitet",
-      description: (
-        <div className="flex items-center space-x-2">
-          <div className="animate-spin rounded-full h-4 w-4 border-2 border-blue-500 border-t-transparent"></div>
-          <span>Alle {allPhotoIds.length} Fotos werden vorbereitet. Dies kann einige Sekunden dauern...</span>
-        </div>
-      ),
-      duration: Infinity, // Keep the toast open until explicitly dismissed
+      description: "Die Anfrage wird an den Server gesendet.",
+      duration: Infinity,
     });
 
     try {
-      const response = await fetch('/api/public/photos/download', {
+      // Step 1: Request download token
+      const response = await fetch('/api/public/photos/prepare-download', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -530,19 +516,12 @@ function PublicGalleryContent() {
       });
 
       if (response.ok) {
-        const blob = await response.blob();
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `photos_${new Date().toISOString().split('T')[0]}.zip`;
-        document.body.appendChild(a);
+        const data = await response.json();
+        
+        // Step 2: Let browser handle download natively
+        window.location.href = data.downloadUrl;
 
-        // Dismiss loading toast only when download dialog appears
         loadingToast.dismiss();
-        a.click();
-
-        window.URL.revokeObjectURL(url);
-        document.body.removeChild(a);
 
         // Create download notification for all photos
         if (gallery?.userId) {
@@ -567,12 +546,13 @@ function PublicGalleryContent() {
         }
 
         toast({
-          title: "Download erfolgreich",
-          description: `Alle ${allPhotoIds.length} Fotos erfolgreich heruntergeladen.`,
+          title: "Download gestartet",
+          description: `Der Browser lädt alle ${allPhotoIds.length} Fotos herunter.`,
+          duration: 3000,
         });
       } else {
         loadingToast.dismiss();
-        console.error('Failed to download photos');
+        console.error('Failed to prepare download');
         toast({
           title: "Fehler",
           description: "Download fehlgeschlagen. Bitte versuche es erneut.",
@@ -581,7 +561,7 @@ function PublicGalleryContent() {
       }
     } catch (error) {
       loadingToast.dismiss();
-      console.error('Error downloading photos:', error);
+      console.error('Error preparing download:', error);
       toast({
         title: "Fehler",
         description: "Download fehlgeschlagen. Bitte versuche es erneut.",
