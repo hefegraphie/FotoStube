@@ -61,7 +61,7 @@ function PublicGalleryContent() {
     showOnlyLiked: false,
     showOnlyRated: false,
     minStars: 0,
-    maxStars: 5
+    maxStars: 5,
   });
 
   // State for loading overlay during batch rating
@@ -71,31 +71,35 @@ function PublicGalleryContent() {
     try {
       // Use public API endpoint instead of authenticated one
       const response = await fetch(`/api/public/photos/${photoId}/rating`, {
-        method: 'POST',
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
         },
-        body: JSON.stringify({ 
+        body: JSON.stringify({
           rating: newRating,
-          userName: 'Anonymer Besucher'
+          userName: "Anonymer Besucher",
         }),
       });
 
       if (response.ok) {
         const result = await response.json();
         // Update local state
-        const updatedPhotos = photos.map(p => 
-          p.id === photoId ? { ...p, rating: result.photo.rating } : p
+        const updatedPhotos = photos.map((p) =>
+          p.id === photoId ? { ...p, rating: result.photo.rating } : p,
         );
         setPhotos(updatedPhotos);
       }
     } catch (error) {
-      console.error('Error updating rating:', error);
+      console.error("Error updating rating:", error);
     }
   };
-  const [gallery, setGallery] = useState<PublicGalleryData['gallery'] | null>(null);
-  const [currentView, setCurrentView] = useState<'main' | 'subgallery'>('main');
-  const [currentSubGalleryId, setCurrentSubGalleryId] = useState<string | null>(null);
+  const [gallery, setGallery] = useState<PublicGalleryData["gallery"] | null>(
+    null,
+  );
+  const [currentView, setCurrentView] = useState<"main" | "subgallery">("main");
+  const [currentSubGalleryId, setCurrentSubGalleryId] = useState<string | null>(
+    null,
+  );
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isPasswordProtected, setIsPasswordProtected] = useState(false);
@@ -103,8 +107,15 @@ function PublicGalleryContent() {
   const [passwordLoading, setPasswordLoading] = useState(false);
   const { toast } = useToast();
 
-
-  const { photos, setPhotos, updatePhotoLike, updatePhotoRating, selectedPhotoIds, togglePhotoSelection, clearSelection } = usePhotos();
+  const {
+    photos,
+    setPhotos,
+    updatePhotoLike,
+    updatePhotoRating,
+    selectedPhotoIds,
+    togglePhotoSelection,
+    clearSelection,
+  } = usePhotos();
 
   const handleToggleSelection = (photoId: string) => {
     togglePhotoSelection(photoId);
@@ -116,6 +127,13 @@ function PublicGalleryContent() {
 
   const handleSelectSubGallery = async (subGalleryId: string) => {
     setPhotos([]); // Clear photos before navigating to sub-gallery
+    
+    // Store password for sub-gallery before navigation
+    const currentPassword = localStorage.getItem(`gallery_access_${galleryId}`);
+    if (currentPassword) {
+      localStorage.setItem(`gallery_access_${subGalleryId}`, currentPassword);
+    }
+    
     window.location.href = `/gallery/${subGalleryId}`;
   };
 
@@ -123,29 +141,28 @@ function PublicGalleryContent() {
     try {
       // Use public API endpoint instead of authenticated one
       const response = await fetch(`/api/public/photos/${photoId}/like`, {
-        method: 'POST',
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
         },
-        body: JSON.stringify({ 
+        body: JSON.stringify({
           isLiked,
-          userName: 'Anonymer Besucher'
+          userName: "Anonymer Besucher",
         }),
       });
 
       if (response.ok) {
         const result = await response.json();
         // Update local state
-        const updatedPhotos = photos.map(p => 
-          p.id === photoId ? { ...p, isLiked: result.photo.isLiked } : p
+        const updatedPhotos = photos.map((p) =>
+          p.id === photoId ? { ...p, isLiked: result.photo.isLiked } : p,
         );
         setPhotos(updatedPhotos);
       }
     } catch (error) {
-      console.error('Error toggling like:', error);
+      console.error("Error toggling like:", error);
     }
   };
-
 
   // Check if user already has access to this gallery or its parent
   const getStoredPassword = () => {
@@ -157,7 +174,11 @@ function PublicGalleryContent() {
       // If we have gallery info and this is a sub-gallery, check parent gallery password
       if (gallery?.parentId) {
         stored = localStorage.getItem(`gallery_access_${gallery.parentId}`);
-        if (stored) return stored;
+        if (stored) {
+          // Also store password for current sub-gallery
+          localStorage.setItem(`gallery_access_${galleryId}`, stored);
+          return stored;
+        }
       }
 
       return null;
@@ -177,7 +198,7 @@ function PublicGalleryContent() {
         localStorage.setItem(`gallery_access_${gallery.parentId}`, password);
       }
     } catch (error) {
-      console.error('Could not store password in localStorage:', error);
+      console.error("Could not store password in localStorage:", error);
     }
   };
 
@@ -187,9 +208,9 @@ function PublicGalleryContent() {
 
     try {
       const response = await fetch(`/api/gallery/${galleryId}/public`, {
-        method: 'POST',
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
         },
         body: JSON.stringify({ password }),
       });
@@ -199,28 +220,41 @@ function PublicGalleryContent() {
         const transformedPhotos = data.photos.map((photo: any) => ({
           id: photo.id,
           src: `/${photo.thumbnailPath || photo.filePath}`,
-          mediumSrc: photo.mediumPath ? `/${photo.mediumPath}` : `/${photo.filePath}`,
+          mediumSrc: photo.mediumPath
+            ? `/${photo.mediumPath}`
+            : `/${photo.filePath}`,
           originalSrc: `/${photo.filePath}`, // Always use filePath for original/download
           alt: photo.alt,
           rating: photo.rating || 0,
           isLiked: photo.isLiked || false,
-          comments: photo.comments?.map((comment: any) => ({
-            id: comment.id,
-            author: comment.commenterName || comment.author || 'Unbekannt',
-            text: comment.text,
-            timestamp: comment.createdAt ? new Date(comment.createdAt).toLocaleString('de-DE', {
-              year: 'numeric',
-              month: '2-digit',
-              day: '2-digit',
-              hour: '2-digit',
-              minute: '2-digit'
-            }) : (comment.timestamp || 'Unbekannt')
-          })) || []
+          comments:
+            photo.comments?.map((comment: any) => ({
+              id: comment.id,
+              author: comment.commenterName || comment.author || "Unbekannt",
+              text: comment.text,
+              timestamp: comment.createdAt
+                ? new Date(comment.createdAt).toLocaleString("de-DE", {
+                    year: "numeric",
+                    month: "2-digit",
+                    day: "2-digit",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })
+                : comment.timestamp || "Unbekannt",
+            })) || [],
         }));
         setGallery(data.gallery);
         setPhotos(transformedPhotos);
         setIsPasswordProtected(false);
         storePassword(password);
+
+        // Also store for parent if this is a sub-gallery
+        if (data.gallery.parentId) {
+          localStorage.setItem(
+            `gallery_access_${data.gallery.parentId}`,
+            password,
+          );
+        }
       } else if (response.status === 401) {
         setPasswordError("Falsches Passwort. Bitte versuche es erneut.");
       } else if (response.status === 403) {
@@ -242,72 +276,144 @@ function PublicGalleryContent() {
       setPhotos([]); // Clear photos on new gallery load
 
       try {
-        // First get gallery info to check if it's a sub-gallery
+        // First get gallery info to check if it's a sub-gallery - use public endpoint
         let galleryInfo;
+        let storedPassword = null;
+
         try {
-          const infoResponse = await fetch(`/api/galleries/${galleryId}`);
-          if (infoResponse.ok) {
-            galleryInfo = await infoResponse.json();
+          // Try to get gallery info without auth first
+          const infoResponse = await fetch(`/api/gallery/${galleryId}/public`);
+
+          if (infoResponse.status === 403) {
+            // Gallery is password protected, check stored passwords
+            // First check for this gallery
+            storedPassword = localStorage.getItem(`gallery_access_${galleryId}`);
+
+            // If no password found, try to get gallery basic info to check for parentId
+            if (!storedPassword) {
+              try {
+                const basicInfoResponse = await fetch(
+                  `/api/galleries/${galleryId}`,
+                );
+                if (basicInfoResponse.ok) {
+                  const basicInfo = await basicInfoResponse.json();
+                  if (basicInfo.parentId) {
+                    // Try parent gallery password
+                    storedPassword = localStorage.getItem(
+                      `gallery_access_${basicInfo.parentId}`,
+                    );
+                    if (storedPassword) {
+                      // Store for current gallery too
+                      localStorage.setItem(
+                        `gallery_access_${galleryId}`,
+                        storedPassword,
+                      );
+                    }
+                  }
+                }
+              } catch (error) {
+                // Ignore error, will show password prompt
+              }
+            }
+
+            if (storedPassword) {
+              const retryResponse = await fetch(
+                `/api/gallery/${galleryId}/public`,
+                {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                  },
+                  body: JSON.stringify({ password: storedPassword }),
+                },
+              );
+
+              if (retryResponse.ok) {
+                const data = await retryResponse.json();
+                galleryInfo = data.gallery;
+                setGallery(galleryInfo);
+
+                // Store password for this gallery too
+                localStorage.setItem(
+                  `gallery_access_${galleryId}`,
+                  storedPassword,
+                );
+
+                const transformedPhotos = data.photos.map((photo: any) => ({
+                  id: photo.id,
+                  src: `/${photo.thumbnailPath || photo.filePath}`,
+                  mediumSrc: photo.mediumPath
+                    ? `/${photo.mediumPath}`
+                    : `/${photo.filePath}`,
+                  originalSrc: `/${photo.filePath}`,
+                  alt: photo.alt,
+                  rating: photo.rating || 0,
+                  isLiked: photo.isLiked || false,
+                  comments:
+                    photo.comments?.map((comment: any) => ({
+                      id: comment.id,
+                      author:
+                        comment.commenterName || comment.author || "Unbekannt",
+                      text: comment.text,
+                      timestamp: comment.createdAt
+                        ? new Date(comment.createdAt).toLocaleString("de-DE", {
+                            year: "numeric",
+                            month: "2-digit",
+                            day: "2-digit",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })
+                        : comment.timestamp || "Unbekannt",
+                    })) || [],
+                }));
+                setPhotos(transformedPhotos);
+                setIsLoading(false);
+                return;
+              }
+            }
+
+            setIsPasswordProtected(true);
+            setIsLoading(false);
+            return;
+          } else if (infoResponse.ok) {
+            const data = await infoResponse.json();
+            galleryInfo = data.gallery;
             setGallery(galleryInfo);
+
+            const transformedPhotos = data.photos.map((photo: any) => ({
+              id: photo.id,
+              src: `/${photo.thumbnailPath || photo.filePath}`,
+              mediumSrc: photo.mediumPath
+                ? `/${photo.mediumPath}`
+                : `/${photo.filePath}`,
+              originalSrc: `/${photo.filePath}`,
+              alt: photo.alt,
+              rating: photo.rating || 0,
+              isLiked: photo.isLiked || false,
+              comments:
+                photo.comments?.map((comment: any) => ({
+                  id: comment.id,
+                  author:
+                    comment.commenterName || comment.author || "Unbekannt",
+                  text: comment.text,
+                  timestamp: comment.createdAt
+                    ? new Date(comment.createdAt).toLocaleString("de-DE", {
+                        year: "numeric",
+                        month: "2-digit",
+                        day: "2-digit",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })
+                    : comment.timestamp || "Unbekannt",
+                })) || [],
+            }));
+            setPhotos(transformedPhotos);
+          } else {
+            setError("Gallery not found or not public");
           }
         } catch (error) {
           console.error("Error fetching gallery info:", error);
-        }
-
-        // Check for stored passwords - first for current gallery, then for parent if it's a sub-gallery
-        let storedPassword = null;
-        try {
-          storedPassword = localStorage.getItem(`gallery_access_${galleryId}`);
-          if (!storedPassword && galleryInfo?.parentId) {
-            storedPassword = localStorage.getItem(`gallery_access_${galleryInfo.parentId}`);
-          }
-        } catch (error) {
-          console.error('Error accessing localStorage:', error);
-        }
-
-        const requestBody = storedPassword ? { password: storedPassword } : {};
-        const method = storedPassword ? 'POST' : 'GET';
-
-        const response = await fetch(`/api/gallery/${galleryId}/public`, {
-          method,
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: method === 'POST' ? JSON.stringify(requestBody) : undefined,
-        });
-
-        if (response.ok) {
-          const data = await response.json();
-          const transformedPhotos = data.photos.map((photo: any) => ({
-            id: photo.id,
-            src: `/${photo.thumbnailPath || photo.filePath}`,
-            mediumSrc: photo.mediumPath ? `/${photo.mediumPath}` : `/${photo.filePath}`,
-            originalSrc: `/${photo.filePath}`,
-            alt: photo.alt,
-            rating: photo.rating || 0,
-            isLiked: photo.isLiked || false,
-            comments: photo.comments?.map((comment: any) => ({
-              id: comment.id,
-              author: comment.commenterName || comment.author || 'Unbekannt',
-              text: comment.text,
-              timestamp: comment.createdAt ? new Date(comment.createdAt).toLocaleString('de-DE', {
-                year: 'numeric',
-                month: '2-digit',
-                day: '2-digit',
-                hour: '2-digit',
-                minute: '2-digit'
-              }) : (comment.timestamp || 'Unbekannt')
-            })) || []
-          }));
-          setGallery(data.gallery);
-          setPhotos(transformedPhotos);
-        } else if (response.status === 403) {
-          setIsPasswordProtected(true);
-        } else if (response.status === 401) {
-          localStorage.removeItem(`gallery_access_${galleryId}`);
-          setIsPasswordProtected(true);
-        } else {
-          setError("Gallery not found or not public");
+          setError("Error loading gallery");
         }
       } catch (error) {
         console.error("Error fetching gallery:", error);
@@ -322,9 +428,6 @@ function PublicGalleryContent() {
     }
   }, [galleryId]); // Remove setPhotos from dependencies to prevent loops
 
-
-
-
   const handleOpenLightbox = (photo: Photo) => {
     // Navigate to lightbox page with return path
     const currentPath = window.location.pathname;
@@ -334,8 +437,6 @@ function PublicGalleryContent() {
       navigate(`/gallery/${galleryId}/photo/${photo.id}?return=${returnPath}`);
     }
   };
-
-
 
   if (isLoading) {
     return (
@@ -376,7 +477,9 @@ function PublicGalleryContent() {
     return (
       <div className="container mx-auto p-6 max-w-6xl">
         <Card className="p-8 text-center">
-          <h1 className="text-2xl font-semibold mb-4">Galerie nicht gefunden</h1>
+          <h1 className="text-2xl font-semibold mb-4">
+            Galerie nicht gefunden
+          </h1>
           <p className="text-muted-foreground">
             Die angeforderte Galerie konnte nicht geladen werden.
           </p>
@@ -385,7 +488,9 @@ function PublicGalleryContent() {
     );
   }
 
-  const selectedPhotos = photos ? photos.filter(photo => selectedPhotoIds.has(photo.id)) : [];
+  const selectedPhotos = photos
+    ? photos.filter((photo) => selectedPhotoIds.has(photo.id))
+    : [];
 
   const handleClearSelection = () => {
     clearSelection();
@@ -396,7 +501,7 @@ function PublicGalleryContent() {
   };
 
   const handleSelectAll = () => {
-    const filteredPhotos = photos.filter(photo => {
+    const filteredPhotos = photos.filter((photo) => {
       if (filters.showOnlyLiked && !photo.isLiked) {
         return false;
       }
@@ -408,8 +513,8 @@ function PublicGalleryContent() {
       }
       return true;
     });
-    const filteredPhotoIds = filteredPhotos.map(photo => photo.id);
-    filteredPhotoIds.forEach(id => togglePhotoSelection(id));
+    const filteredPhotoIds = filteredPhotos.map((photo) => photo.id);
+    filteredPhotoIds.forEach((id) => togglePhotoSelection(id));
   };
 
   const handleDownloadSelectedPhotos = async () => {
@@ -426,19 +531,19 @@ function PublicGalleryContent() {
 
     try {
       // Step 1: Request download token
-      const response = await fetch('/api/public/photos/prepare-download', {
-        method: 'POST',
+      const response = await fetch("/api/public/photos/prepare-download", {
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          photoIds: photoIds
+          photoIds: photoIds,
         }),
       });
 
       if (response.ok) {
         const data = await response.json();
-        
+
         // Step 2: Let browser handle download natively
         window.location.href = data.downloadUrl;
 
@@ -447,33 +552,33 @@ function PublicGalleryContent() {
         // Create download notification
         if (gallery?.userId) {
           try {
-            await fetch('/api/notifications', {
-              method: 'POST',
+            await fetch("/api/notifications", {
+              method: "POST",
               headers: {
-                'Content-Type': 'application/json',
+                "Content-Type": "application/json",
               },
               body: JSON.stringify({
                 userId: gallery.userId,
                 galleryId: gallery.id,
-                type: 'download',
-                message: `Jemand hat ${photoIds.length} Foto${photoIds.length !== 1 ? 's' : ''} aus Galerie "${gallery.name}" heruntergeladen`,
-                actorName: 'Anonymer Besucher',
-                isRead: false
-              })
+                type: "download",
+                message: `Jemand hat ${photoIds.length} Foto${photoIds.length !== 1 ? "s" : ""} aus Galerie "${gallery.name}" heruntergeladen`,
+                actorName: "Anonymer Besucher",
+                isRead: false,
+              }),
             });
           } catch (error) {
-            console.error('Error creating download notification:', error);
+            console.error("Error creating download notification:", error);
           }
         }
 
         toast({
           title: "Download gestartet",
-          description: `Der Browser lädt ${photoIds.length} Foto${photoIds.length !== 1 ? 's' : ''} herunter.`,
+          description: `Der Browser lädt ${photoIds.length} Foto${photoIds.length !== 1 ? "s" : ""} herunter.`,
           duration: 3000,
         });
       } else {
         loadingToast.dismiss();
-        console.error('Failed to prepare download');
+        console.error("Failed to prepare download");
         toast({
           title: "Fehler",
           description: "Download fehlgeschlagen. Bitte versuche es erneut.",
@@ -482,7 +587,7 @@ function PublicGalleryContent() {
       }
     } catch (error) {
       loadingToast.dismiss();
-      console.error('Error preparing download:', error);
+      console.error("Error preparing download:", error);
       toast({
         title: "Fehler",
         description: "Download fehlgeschlagen. Bitte versuche es erneut.",
@@ -492,7 +597,7 @@ function PublicGalleryContent() {
   };
 
   const handleDownloadAllPhotos = async () => {
-    const allPhotoIds = photos.map(p => p.id);
+    const allPhotoIds = photos.map((p) => p.id);
 
     if (allPhotoIds.length === 0) return;
 
@@ -505,19 +610,19 @@ function PublicGalleryContent() {
 
     try {
       // Step 1: Request download token
-      const response = await fetch('/api/public/photos/prepare-download', {
-        method: 'POST',
+      const response = await fetch("/api/public/photos/prepare-download", {
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          photoIds: allPhotoIds
+          photoIds: allPhotoIds,
         }),
       });
 
       if (response.ok) {
         const data = await response.json();
-        
+
         // Step 2: Let browser handle download natively
         window.location.href = data.downloadUrl;
 
@@ -526,22 +631,22 @@ function PublicGalleryContent() {
         // Create download notification for all photos
         if (gallery?.userId) {
           try {
-            await fetch('/api/notifications', {
-              method: 'POST',
+            await fetch("/api/notifications", {
+              method: "POST",
               headers: {
-                'Content-Type': 'application/json',
+                "Content-Type": "application/json",
               },
               body: JSON.stringify({
                 userId: gallery.userId,
                 galleryId: gallery.id,
-                type: 'download',
+                type: "download",
                 message: `Jemand hat alle ${allPhotoIds.length} Fotos aus Galerie "${gallery.name}" heruntergeladen`,
-                actorName: 'Anonymer Besucher',
-                isRead: false
-              })
+                actorName: "Anonymer Besucher",
+                isRead: false,
+              }),
             });
           } catch (error) {
-            console.error('Error creating download notification:', error);
+            console.error("Error creating download notification:", error);
           }
         }
 
@@ -552,7 +657,7 @@ function PublicGalleryContent() {
         });
       } else {
         loadingToast.dismiss();
-        console.error('Failed to prepare download');
+        console.error("Failed to prepare download");
         toast({
           title: "Fehler",
           description: "Download fehlgeschlagen. Bitte versuche es erneut.",
@@ -561,7 +666,7 @@ function PublicGalleryContent() {
       }
     } catch (error) {
       loadingToast.dismiss();
-      console.error('Error preparing download:', error);
+      console.error("Error preparing download:", error);
       toast({
         title: "Fehler",
         description: "Download fehlgeschlagen. Bitte versuche es erneut.",
@@ -580,8 +685,8 @@ function PublicGalleryContent() {
 
     // Store original ratings for rollback
     const originalRatings = new Map();
-    photoIds.forEach(photoId => {
-      const photo = photos.find(p => p.id === photoId);
+    photoIds.forEach((photoId) => {
+      const photo = photos.find((p) => p.id === photoId);
       if (photo) {
         originalRatings.set(photoId, photo.rating);
       }
@@ -598,15 +703,15 @@ function PublicGalleryContent() {
 
     try {
       // Use public API endpoint instead of authenticated one
-      const response = await fetch('/api/public/photos/batch/rating', {
-        method: 'POST',
+      const response = await fetch("/api/public/photos/batch/rating", {
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
         },
         body: JSON.stringify({
           photoIds,
           rating,
-          userName: 'Anonymer Besucher'
+          userName: "Anonymer Besucher",
         }),
       });
 
@@ -616,15 +721,18 @@ function PublicGalleryContent() {
 
         // Update with server response to ensure consistency
         const finalPhotos = photos.map((photo) => {
-          const updatedPhoto = updatedPhotos.find((up: any) => up.id === photo.id);
-          return updatedPhoto ? { ...photo, rating: updatedPhoto.rating } : photo;
+          const updatedPhoto = updatedPhotos.find(
+            (up: any) => up.id === photo.id,
+          );
+          return updatedPhoto
+            ? { ...photo, rating: updatedPhoto.rating }
+            : photo;
         });
         setPhotos(finalPhotos);
 
-
         toast({
           title: "Bewertung erfolgreich",
-          description: `${photoIds.length} Foto${photoIds.length > 1 ? 's' : ''} erfolgreich mit ${rating} Stern${rating > 1 ? 'en' : ''} bewertet`,
+          description: `${photoIds.length} Foto${photoIds.length > 1 ? "s" : ""} erfolgreich mit ${rating} Stern${rating > 1 ? "en" : ""} bewertet`,
         });
       } else {
         // Revert optimistic updates on error
@@ -636,7 +744,7 @@ function PublicGalleryContent() {
         });
         setPhotos(revertedPhotos);
         const errorData = await response.json();
-        console.error('Batch rating failed:', errorData);
+        console.error("Batch rating failed:", errorData);
         toast({
           title: "Fehler",
           description: "Fehler beim Bewerten der ausgewählten Fotos",
@@ -652,7 +760,7 @@ function PublicGalleryContent() {
         return photo;
       });
       setPhotos(revertedPhotos);
-      console.error('Error setting batch rating:', error);
+      console.error("Error setting batch rating:", error);
       toast({
         title: "Fehler",
         description: "Fehler beim Bewerten der ausgewählten Fotos",
@@ -667,19 +775,20 @@ function PublicGalleryContent() {
   return (
     <div className="flex flex-col md:flex-row h-screen">
       {/* Loading Overlay */}
-      <LoadingOverlay isVisible={isBatchRating} message="Bilder werden bewertet..." />
+      <LoadingOverlay
+        isVisible={isBatchRating}
+        message="Bilder werden bewertet..."
+      />
 
       <div className="flex-1 p-4 md:p-6 space-y-4 md:space-y-6 overflow-y-auto">
         <div className="flex items-center justify-between">
-          <h1 className="text-xl md:text-2xl font-medium">
-            {gallery?.name}
-          </h1>
+          <h1 className="text-xl md:text-2xl font-medium">{gallery?.name}</h1>
           <Button
             variant="default"
             size="icon"
             className="md:hidden shadow-lg bg-primary hover:bg-primary/90"
             onClick={() => {
-              const event = new CustomEvent('toggleSelectionPanel');
+              const event = new CustomEvent("toggleSelectionPanel");
               window.dispatchEvent(event);
             }}
             data-testid="toggle-selection-panel"
@@ -688,27 +797,27 @@ function PublicGalleryContent() {
           </Button>
         </div>
 
-        <Breadcrumb items={
-          gallery?.parentId
-            ? [
-                {
-                  label: 'Galerie',
-                  onClick: () => {
-                    window.location.href = `/gallery/${gallery.parentId}`;
-                  }
-                },
-                { label: gallery?.name || 'Galerie', onClick: () => {} }
-              ]
-            : [
-                { label: 'Galerie', onClick: () => {} }
-              ]
-        } />
+        <Breadcrumb
+          items={
+            gallery?.parentId
+              ? [
+                  {
+                    label: "Galerie",
+                    onClick: () => {
+                      window.location.href = `/gallery/${gallery.parentId}`;
+                    },
+                  },
+                  { label: gallery?.name || "Galerie", onClick: () => {} },
+                ]
+              : [{ label: "Galerie", onClick: () => {} }]
+          }
+        />
 
-        {galleryId && !gallery?.parentId && (
+        {galleryId && (
           <SubGalleries
             parentGalleryId={galleryId}
             onSelectSubGallery={handleSelectSubGallery}
-            isSubGallery={false}
+            isSubGallery={!!gallery?.parentId}
             onClearSelection={handleClearSelection}
           />
         )}
@@ -722,8 +831,10 @@ function PublicGalleryContent() {
           authContext={null}
           filters={filters}
           galleryContext={{
-            currentGallery: gallery?.name || 'Unbekannte Galerie',
-            parentGallery: gallery?.parentId ? 'Übergeordnete Galerie' : undefined
+            currentGallery: gallery?.name || "Unbekannte Galerie",
+            parentGallery: gallery?.parentId
+              ? "Übergeordnete Galerie"
+              : undefined,
           }}
           onPhotoClick={handleOpenLightbox}
           onRatingChange={handleRatingChange}
@@ -737,14 +848,18 @@ function PublicGalleryContent() {
         onRatingChange={handleBatchRatingChange}
         onRemoveFromSelection={handleRemoveFromSelection}
         onSelectAll={handleSelectAll}
-        onDownloadSelected={gallery?.allowDownload !== false ? handleDownloadSelectedPhotos : undefined}
-        onDownloadAll={gallery?.allowDownload !== false ? handleDownloadAllPhotos : undefined}
+        onDownloadSelected={
+          gallery?.allowDownload !== false
+            ? handleDownloadSelectedPhotos
+            : undefined
+        }
+        onDownloadAll={
+          gallery?.allowDownload !== false ? handleDownloadAllPhotos : undefined
+        }
         filters={filters}
         onFiltersChange={setFilters}
         showFilters={true}
       />
-
-
     </div>
   );
 }
