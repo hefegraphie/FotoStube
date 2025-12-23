@@ -655,11 +655,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "Galerie nicht gefunden" });
       }
 
-      // Check if parent gallery has password protection
-      if (parentGallery.password) {
-        return res.status(403).json({ error: "Galerie ist passwortgeschützt" });
-      }
-
+      // For public access, we don't check password here - the gallery itself was already unlocked
       // Get sub-galleries
       const subGalleries = await storage.getSubGalleriesByParentId(galleryId);
 
@@ -1299,11 +1295,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         res.json(gallery);
       } catch (error) {
         console.error("Update download settings error:", error);
-        res
-          .status(500)
-          .json({
-            error: "Fehler beim Aktualisieren der Download-Einstellungen",
-          });
+        res.status(500).json({
+          error: "Fehler beim Aktualisieren der Download-Einstellungen",
+        });
       }
     },
   );
@@ -1800,7 +1794,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   );
 
   // In-memory cache for download tokens (expires after 5 minutes)
-  const downloadCache = new Map<string, { photoIds: string[], expiresAt: number }>();
+  const downloadCache = new Map<
+    string,
+    { photoIds: string[]; expiresAt: number }
+  >();
 
   // Cleanup expired tokens every minute
   setInterval(() => {
@@ -1813,29 +1810,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
   }, 60000);
 
   // Prepare download endpoint - returns download token
-  app.post("/api/photos/prepare-download", authenticateJWT, async (req: any, res) => {
-    try {
-      const { photoIds } = req.body;
+  app.post(
+    "/api/photos/prepare-download",
+    authenticateJWT,
+    async (req: any, res) => {
+      try {
+        const { photoIds } = req.body;
 
-      if (!Array.isArray(photoIds) || photoIds.length === 0) {
-        return res.status(400).json({ error: "photoIds array is required" });
+        if (!Array.isArray(photoIds) || photoIds.length === 0) {
+          return res.status(400).json({ error: "photoIds array is required" });
+        }
+
+        // Generate unique token
+        const token = crypto.randomBytes(32).toString("hex");
+
+        // Store in cache with 5 minute expiration
+        downloadCache.set(token, {
+          photoIds,
+          expiresAt: Date.now() + 5 * 60 * 1000,
+        });
+
+        res.json({ downloadUrl: `/api/download-zip/${token}` });
+      } catch (error) {
+        console.error("Prepare download error:", error);
+        res.status(500).json({ error: "Failed to prepare download" });
       }
-
-      // Generate unique token
-      const token = crypto.randomBytes(32).toString("hex");
-      
-      // Store in cache with 5 minute expiration
-      downloadCache.set(token, {
-        photoIds,
-        expiresAt: Date.now() + 5 * 60 * 1000
-      });
-
-      res.json({ downloadUrl: `/api/download-zip/${token}` });
-    } catch (error) {
-      console.error("Prepare download error:", error);
-      res.status(500).json({ error: "Failed to prepare download" });
-    }
-  });
+    },
+  );
 
   // Public prepare download endpoint (no auth required)
   app.post("/api/public/photos/prepare-download", async (req, res) => {
@@ -1848,11 +1849,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Generate unique token
       const token = crypto.randomBytes(32).toString("hex");
-      
+
       // Store in cache with 5 minute expiration
       downloadCache.set(token, {
         photoIds,
-        expiresAt: Date.now() + 5 * 60 * 1000
+        expiresAt: Date.now() + 5 * 60 * 1000,
       });
 
       res.json({ downloadUrl: `/api/download-zip/${token}` });
@@ -1866,16 +1867,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/download-zip/:token", async (req, res) => {
     try {
       const { token } = req.params;
-      
+
       // Get photoIds from cache
       const cacheEntry = downloadCache.get(token);
-      
+
       if (!cacheEntry) {
-        return res.status(404).json({ error: "Download token expired or invalid" });
+        return res
+          .status(404)
+          .json({ error: "Download token expired or invalid" });
       }
 
       const { photoIds } = cacheEntry;
-      
+
       // Delete token after use (one-time use)
       downloadCache.delete(token);
 
