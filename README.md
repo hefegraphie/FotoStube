@@ -88,7 +88,6 @@ docker-compose up -d
 ```bash
 apt update
 ```
-
 ```bash
 apt install curl
 ```
@@ -101,7 +100,11 @@ sudo ./prodinstall.sh
 #### Debian 13
 ```bash
 apt update
+```
+```bash
 apt install curl
+```
+```bash
 curl -fsSL https://github.com/hefegraphie/FotoStube/raw/main/prodinstall.sh -o prodinstall.sh
 chmod +x prodinstall.sh
 ./prodinstall.sh
