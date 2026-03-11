@@ -1,5 +1,15 @@
 ### FotoStube Produktiv-Setup
 
+## 🔒 Wichtiger Hinweis: HTTPS (SSL) zwingend erforderlich
+Um deine Daten bestmöglich zu schützen, setzt FotoStube auf strikte Sicherheitsstandards. Die Anmeldung und Sitzungsverwaltung erfolgt über sogenannte **JWT-Token**, die als streng gesicherte Cookies an deinen Browser gesendet werden.
+
+**Das bedeutet:** Moderne Browser blockieren diese Cookies, wenn die Verbindung nicht verschlüsselt ist. Rufst du FotoStube über das Netzwerk oder Internet nur mit unverschlüsseltem `http://...` auf, wird der Login fehlschlagen und viele Funktionen der App bleiben gesperrt. **Dies ist ein gewolltes Sicherheitsfeature und kein Fehler!**
+
+**Die Lösung:** Betreibe FotoStube immer hinter einem sogenannten **Reverse Proxy** (z. B. Nginx Proxy Manager, Traefik, Caddy oder Cloudflare Tunnels), der deine Domain mit einem gültigen SSL-Zertifikat (HTTPS) absichert. 
+*(Ausnahme: Lediglich beim reinen Testen direkt am eigenen PC über `http://localhost:5000` machen Browser oft eine Ausnahme).*
+
+---
+
 ## Installation & Start
 
 ### Variante A: Docker Installation (Empfohlen)
