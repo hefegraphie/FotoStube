@@ -128,5 +128,7 @@ Das Skript klont das FotoStube-Repo, installiert notwendige Pakete inklusive Pos
 - Das Skript pausiert nach jedem einzelnen Schritt zur Überprüfung, mit `Enter` bestätigen um fortzufahren.
 
 ---
-So ist der schnelle Start für FotoStube auf jedem System gewährleistet.
+# Wichtiger Disclaimer:
+Große Teile des Programms wurden mit KI geschrieben aber von mir persönlich nach bestem Wissen und Gewissen getestet.
+Ich nutze es nun schon seit 11.2025 produktiv.
 ```
