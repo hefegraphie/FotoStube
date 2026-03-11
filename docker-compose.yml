@@ -30,5 +30,5 @@ services:
       - ./logs:/app/logs
 
 # Definiert den Speicherort für die dauerhaften Datenbank-Daten
-#volumes:
-#  pgdata:
+volumes:
+  pgdata:
