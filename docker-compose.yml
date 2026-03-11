@@ -1,0 +1,34 @@
+services:
+  # 1. Die Datenbank
+  db:
+    image: postgres:15-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: hefe
+      POSTGRES_PASSWORD: super_secret_password
+      POSTGRES_DB: fotostube
+    volumes:
+      - pgdata:/var/lib/postgresql/data # Speichert die DB-Daten dauerhaft
+
+  # 2. Deine Node.js App
+  app:
+    build: . # Baut das Image aus deinem lokalen Dockerfile
+    restart: unless-stopped
+    ports:
+      - "5000:5000" # Mappt Port 5000 von außen auf Port 5000 im Container
+    depends_on:
+      - db # Wartet, bis die Datenbank gestartet ist
+    environment:
+      # Die URL nutzt als Hostnamen "db" (den Namen des Services oben) statt "localhost"
+      - DATABASE_URL=postgresql://hefe:super_secret_password@db:5432/fotostube
+      - PORT=5000
+      - NODE_ENV=production
+      - JWT_SECRET=hier_ein_langes_zufaelliges_geheimnis_eintragen
+    volumes:
+      # Falls deine App hochgeladene Bilder lokal speichert, müssen wir dieses Verzeichnis auslagern
+      # Beispiel: - ./uploads:/app/uploads 
+      - ./logs:/app/logs
+
+# Definiert den Speicherort für die dauerhaften Datenbank-Daten
+#volumes:
+#  pgdata:
