@@ -10,7 +10,7 @@ curl -fsSL https://github.com/hefegraphie/FotoStube/raw/main/prodinstall.sh -o p
 chmod +x prodinstall.sh &&
 sudo ./prodinstall.sh
 ```
-# Debian 13
+## Debian 13
 ```
 apt update
 
