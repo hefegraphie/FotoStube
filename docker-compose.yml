@@ -1,5 +1,6 @@
+version: '3.8'
+
 services:
-  # 1. Die Datenbank
   db:
     image: postgres:15-alpine
     restart: unless-stopped
@@ -8,27 +9,30 @@ services:
       POSTGRES_PASSWORD: super_secret_password
       POSTGRES_DB: fotostube
     volumes:
-      - pgdata:/var/lib/postgresql/data # Speichert die DB-Daten dauerhaft
+      - pgdata:/var/lib/postgresql/data
+    # NEU: Docker testet alle 5 Sekunden, ob die DB ansprechbar ist
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hefe -d fotostube"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
-  # 2. Deine Node.js App
   app:
-    build: . # Baut das Image aus deinem lokalen Dockerfile
+    build: .
     restart: unless-stopped
     ports:
-      - "5000:5000" # Mappt Port 5000 von außen auf Port 5000 im Container
+      - "5000:5000"
     depends_on:
-      - db # Wartet, bis die Datenbank gestartet ist
+      db:
+        # NEU: Die App startet erst, wenn der Healthcheck oben "gesund" meldet
+        condition: service_healthy
     environment:
-      # Die URL nutzt als Hostnamen "db" (den Namen des Services oben) statt "localhost"
       - DATABASE_URL=postgresql://hefe:super_secret_password@db:5432/fotostube
       - PORT=5000
       - NODE_ENV=production
       - JWT_SECRET=hier_ein_langes_zufaelliges_geheimnis_eintragen
     volumes:
-      # Falls deine App hochgeladene Bilder lokal speichert, müssen wir dieses Verzeichnis auslagern
-      # Beispiel: - ./uploads:/app/uploads 
       - ./logs:/app/logs
 
-# Definiert den Speicherort für die dauerhaften Datenbank-Daten
 volumes:
   pgdata:
