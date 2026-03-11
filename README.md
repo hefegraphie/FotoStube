@@ -19,7 +19,7 @@ apt install curl
 
 curl -fsSL https://github.com/hefegraphie/FotoStube/raw/main/prodinstall.sh -o prodinstall.sh &&
 chmod +x prodinstall.sh &&
-sudo ./prodinstall.sh
+./prodinstall.sh
 ```
 Das Skript klont das FotoStube-Repo, installiert notwendige Pakete inklusive PostgreSQL, richtet die Datenbank ein, installiert Node.js Abhängigkeiten und fragt interaktiv nach Zugangsdaten.
 
