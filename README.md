@@ -26,7 +26,7 @@ Das Skript klont das FotoStube-Repo, installiert notwendige Pakete inklusive Pos
 ## Hinweise
 
 - Das Skript muss mit `sudo` ausgeführt werden.
-- Während des Setups werden Eingaben für PostgreSQL Benutzername, Passwort sowie ein Testnutzer abgefragt.
+- Während des Setups werden Eingaben für PostgreSQL Benutzername, Passwort  abgefragt.
 - Das Skript pausiert nach jedem einzelnen Schritt zur Überprüfung, mit Enter bestätigen um fortzufahren.
 
 ---
