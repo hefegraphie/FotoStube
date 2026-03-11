@@ -31,5 +31,5 @@ Das Skript klont das FotoStube-Repo, installiert notwendige Pakete inklusive Pos
 
 ---
 
-So ist der schnelle Entwicklungsstart für FotoStube gewährleistet.
+So ist der schnelle Start für FotoStube gewährleistet.
 
