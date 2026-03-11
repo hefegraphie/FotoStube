@@ -1,6 +1,6 @@
 ### FotoStube Produktiv-Setup
 ## Installation & Start
-## Ubuntu
+## Ubuntu 22.04
 ```
 apt update
 
