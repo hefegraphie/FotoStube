@@ -21,12 +21,17 @@ run_as() {
   shift
   local cmd="$*"
   
-  if command -v sudo >/dev/null 2>&1; then
-    sudo -u "$target_user" bash -c "$cmd"
-  else
-    # Fallback, wenn wir root sind, aber kein sudo haben
-    su -s /bin/bash "$target_user" -c "$cmd"
-  fi
+  # Wir wechseln subshell-basiert nach /tmp, um "Permission denied"-Warnungen 
+  # zu vermeiden, falls das Skript aus z. B. /root aufgerufen wird.
+  (
+    cd /tmp >/dev/null 2>&1
+    if command -v sudo >/dev/null 2>&1; then
+      sudo -u "$target_user" bash -c "$cmd"
+    else
+      # Fallback, wenn wir root sind, aber kein sudo haben
+      su -s /bin/bash "$target_user" -c "$cmd"
+    fi
+  )
 }
 
 # ==============================================================================
@@ -148,16 +153,6 @@ $SUDO chown fotostube:fotostube "$install_dir/.env"
 
 run_as fotostube "cd $install_dir && npm run db:push"
 wait_for_continue
-
-read -p "Geben Sie den Namen für den Admin ein: " admin_name
-read -sp "Geben Sie das Passwort für den Admin ein: " admin_pass
-echo
-
-# Passwort in Node.js mit bcrypt hashen
-hashed_pass=$(run_as fotostube "cd $install_dir && node -e \"const bcrypt = require('bcrypt'); bcrypt.hash(process.argv[1], 10).then(h => console.log(h));\" \"$admin_pass\"")
-
-# In DB einfügen
-run_as postgres "psql postgresql://$pg_user:$pg_pass@localhost:5432/fotostube -c \"INSERT INTO users (name, password, role) VALUES ('$admin_name', '$hashed_pass', 'Admin');\""
 
 $SUDO chown -R fotostube:fotostube "$install_dir"
 
