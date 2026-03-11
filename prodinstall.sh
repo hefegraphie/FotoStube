@@ -133,9 +133,13 @@ read -p "Geben Sie den PostgreSQL Benutzername ein (z.B. hefe): " pg_user
 read -sp "Geben Sie das Passwort für PostgreSQL Benutzer $pg_user ein: " pg_pass
 echo
 
-run_as postgres "psql -c \"CREATE DATABASE fotostube;\"" || true
+# Anpassung für PostgreSQL 15+ (Debian 12+ / Ubuntu 24.04+)
+# Erst User anlegen, dann DB mit Owner anlegen, dann Schema-Rechte vergeben.
 run_as postgres "psql -c \"CREATE USER $pg_user WITH PASSWORD '$pg_pass';\"" || true
-run_as postgres "psql -c \"GRANT ALL PRIVILEGES ON DATABASE fotostube TO $pg_user;\""
+run_as postgres "psql -c \"CREATE DATABASE fotostube OWNER $pg_user;\"" || true
+run_as postgres "psql -c \"ALTER DATABASE fotostube OWNER TO $pg_user;\"" || true
+# Connect direkt in die fotostube DB (-d fotostube) und Schema-Rechte geben
+run_as postgres "psql -d fotostube -c \"GRANT ALL ON SCHEMA public TO $pg_user;\"" || true
 
 wait_for_continue
 
@@ -151,6 +155,7 @@ JWT_SECRET=$jwt_secret
 EOF"
 $SUDO chown fotostube:fotostube "$install_dir/.env"
 
+# Jetzt klappt der DB-Push, da der User Owner ist und Rechte auf das public-Schema hat
 run_as fotostube "cd $install_dir && npm run db:push"
 wait_for_continue
 
