@@ -87,7 +87,10 @@ docker-compose up -d
 #### Ubuntu 22.04
 ```bash
 apt update
+```
+```bash
 apt install curl
+```
 curl -fsSL https://github.com/hefegraphie/FotoStube/raw/main/prodinstall.sh -o prodinstall.sh
 chmod +x prodinstall.sh
 sudo ./prodinstall.sh
