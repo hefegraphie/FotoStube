@@ -88,9 +88,11 @@ docker-compose up -d
 ```bash
 apt update
 ```
+
 ```bash
 apt install curl
 ```
+```bash
 curl -fsSL https://github.com/hefegraphie/FotoStube/raw/main/prodinstall.sh -o prodinstall.sh
 chmod +x prodinstall.sh
 sudo ./prodinstall.sh
