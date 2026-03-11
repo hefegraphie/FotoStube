@@ -1,38 +1,3 @@
-### FotoStube Produktiv-Setup
-## Installation & Start
-## Ubuntu 22.04
-```
-apt update
-
-apt install curl
-
-curl -fsSL https://github.com/hefegraphie/FotoStube/raw/main/prodinstall.sh -o prodinstall.sh &&
-chmod +x prodinstall.sh &&
-sudo ./prodinstall.sh
-```
-
-## Debian 13
-```
-apt update
-
-apt install curl
-
-curl -fsSL https://github.com/hefegraphie/FotoStube/raw/main/prodinstall.sh -o prodinstall.sh &&
-chmod +x prodinstall.sh &&
-./prodinstall.sh
-```
-Das Skript klont das FotoStube-Repo, installiert notwendige Pakete inklusive PostgreSQL, richtet die Datenbank ein, installiert Node.js Abhängigkeiten und fragt interaktiv nach Zugangsdaten.
-
-## Hinweise
-
-- Das Skript muss mit `sudo` ausgeführt werden.
-- Während des Setups werden Eingaben für PostgreSQL Benutzername, Passwort  abgefragt.
-- Das Skript pausiert nach jedem einzelnen Schritt zur Überprüfung, mit Enter bestätigen um fortzufahren.
-
----
-
-So ist der schnelle Start für FotoStube gewährleistet.
-
 Hier ist deine vollständige und erweiterte `README.md`. Ich habe die Docker-Installation als "Empfohlene Variante" ganz nach oben gesetzt und absolut anfängerfreundlich (Schritt-für-Schritt mit `nano`-Speicherbefehlen) formuliert. 
 
 Du kannst diesen Block einfach 1:1 kopieren:
