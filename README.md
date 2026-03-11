@@ -1,7 +1,3 @@
-Hier ist deine vollständige und erweiterte `README.md`. Ich habe die Docker-Installation als "Empfohlene Variante" ganz nach oben gesetzt und absolut anfängerfreundlich (Schritt-für-Schritt mit `nano`-Speicherbefehlen) formuliert. 
-
-Du kannst diesen Block einfach 1:1 kopieren:
-
 ```markdown
 ### FotoStube Produktiv-Setup
 
