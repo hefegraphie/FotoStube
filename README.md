@@ -1,5 +1,16 @@
 # FotoStube Produktiv-Setup
 ## Installation & Start
+# Ubuntu
+```
+apt update
+
+apt install curl
+
+curl -fsSL https://github.com/hefegraphie/FotoStube/raw/main/prodinstall.sh -o prodinstall.sh &&
+chmod +x prodinstall.sh &&
+sudo ./prodinstall.sh
+```
+# Debian 13
 ```
 apt update
 
