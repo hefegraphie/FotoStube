@@ -82,7 +82,7 @@ docker-compose up -d
 
 ---
 
-### Variante B: Manuelle Installation (Bare-Metal)
+### Variante B: Manuelle Installation (Bare-Metal, VPS oder LXC)
 
 #### Ubuntu 22.04
 ```bash
