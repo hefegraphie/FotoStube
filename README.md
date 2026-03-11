@@ -1,4 +1,3 @@
-```markdown
 ### FotoStube Produktiv-Setup
 
 ## Installation & Start
