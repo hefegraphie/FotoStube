@@ -2,57 +2,124 @@
 
 set -e  # Stoppt bei Fehlern
 
+# ==============================================================================
+# 1. ROOT-RECHTE & SUDO-HANDLING
+# ==============================================================================
+if [ "$(id -u)" -eq 0 ]; then
+  SUDO="" # Wir sind root, kein sudo nötig
+elif command -v sudo >/dev/null 2>&1; then
+  SUDO="sudo" # Wir sind normaler User, aber sudo ist da
+else
+  echo "Fehler: Dieses Skript benötigt Root-Rechte."
+  echo "Bitte führen Sie das Skript als 'root' aus oder installieren Sie 'sudo'."
+  exit 1
+fi
+
+# Hilfsfunktion, um Befehle als ein anderer User (z.B. postgres oder fotostube) auszuführen
+run_as() {
+  local target_user="$1"
+  shift
+  local cmd="$*"
+  
+  if command -v sudo >/dev/null 2>&1; then
+    sudo -u "$target_user" bash -c "$cmd"
+  else
+    # Fallback, wenn wir root sind, aber kein sudo haben
+    su -s /bin/bash "$target_user" -c "$cmd"
+  fi
+}
+
+# ==============================================================================
+# 2. PAKETMANAGER & DISTRIBUTIONS-ERKENNUNG
+# ==============================================================================
+if command -v apt-get >/dev/null 2>&1; then
+  OS_FAMILY="debian"
+  PKG_UPDATE="$SUDO apt-get update"
+  PKG_INSTALL="$SUDO apt-get install -y"
+  PKG_REMOVE="$SUDO apt-get remove -y"
+  PG_PACKAGES="postgresql postgresql-contrib"
+  NODE_URL="https://deb.nodesource.com/setup_20.x"
+elif command -v dnf >/dev/null 2>&1 || command -v yum >/dev/null 2>&1; then
+  OS_FAMILY="rhel"
+  PKG_MGR=$(command -v dnf >/dev/null 2>&1 && echo "dnf" || echo "yum")
+  PKG_UPDATE="$SUDO $PKG_MGR check-update || true"
+  PKG_INSTALL="$SUDO $PKG_MGR install -y"
+  PKG_REMOVE="$SUDO $PKG_MGR remove -y"
+  PG_PACKAGES="postgresql postgresql-server"
+  NODE_URL="https://rpm.nodesource.com/setup_20.x"
+elif command -v pacman >/dev/null 2>&1; then
+  OS_FAMILY="arch"
+  PKG_UPDATE="$SUDO pacman -Sy"
+  PKG_INSTALL="$SUDO pacman -S --noconfirm"
+  PKG_REMOVE="$SUDO pacman -Rns --noconfirm"
+  PG_PACKAGES="postgresql"
+  NODE_URL="" # Arch bringt aktuelles Node.js direkt mit
+else
+  echo "Fehler: Nicht unterstützter Paketmanager. Bitte manuell installieren."
+  exit 1
+fi
+
 function wait_for_continue() {
   read -p "Weiter mit dem nächsten Schritt? (Enter drücken)"
 }
 
+# ==============================================================================
+# 3. INSTALLATION
+# ==============================================================================
 echo "==> System aktualisieren..."
-sudo apt update
+$PKG_UPDATE
 wait_for_continue
 
 echo "==> Git, curl und PostgreSQL installieren..."
-sudo apt install -y git curl postgresql postgresql-contrib
+$PKG_INSTALL git curl $PG_PACKAGES
 wait_for_continue
+
+# RHEL/Fedora Besonderheit: Datenbank initialisieren
+if [ "$OS_FAMILY" = "rhel" ]; then
+  echo "==> PostgreSQL initialisieren (RHEL/Fedora spezifisch)..."
+  $SUDO postgresql-setup --initdb || true
+fi
 
 git_url="https://github.com/hefegraphie/FotoStube"
 install_dir="/opt/fotostube"
 
 if ! id -u fotostube >/dev/null 2>&1; then
   echo "==> Systemuser 'fotostube' anlegen..."
-  sudo useradd -r -m -d "$install_dir" -s /usr/sbin/nologin fotostube
+  $SUDO useradd -r -m -d "$install_dir" -s /usr/sbin/nologin fotostube
 fi
 
-sudo apt remove -y nodejs npm || true
-sudo apt autoremove -y
-
-curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
-sudo apt install -y nodejs
+echo "==> Node.js installieren..."
+$PKG_REMOVE nodejs npm || true
+if [ -n "$NODE_URL" ]; then
+  curl -fsSL "$NODE_URL" | $SUDO bash -
+fi
+$PKG_INSTALL nodejs
 wait_for_continue
 
 if [ -d "$install_dir" ]; then
     if [ -d "$install_dir/.git" ]; then
         echo "==> Repository existiert, pull..."
-        sudo -u fotostube git -C "$install_dir" config --global --add safe.directory "$install_dir"
-        sudo -u fotostube git -C "$install_dir" pull
+        run_as fotostube "git -C $install_dir config --global --add safe.directory $install_dir"
+        run_as fotostube "git -C $install_dir pull"
     else
         echo "==> Existierendes Verzeichnis, aber kein Git-Repo. Backup & neu klonen..."
-        sudo mv "$install_dir" "${install_dir}_backup_$(date +%s)"
-        sudo git clone "$git_url" "$install_dir"
+        $SUDO mv "$install_dir" "${install_dir}_backup_$(date +%s)"
+        $SUDO git clone "$git_url" "$install_dir"
     fi
 else
     echo "==> Repository noch nicht geklont, klone neu..."
-    sudo git clone "$git_url" "$install_dir"
+    $SUDO git clone "$git_url" "$install_dir"
 fi
 
-sudo chown -R fotostube:fotostube "$install_dir"
+$SUDO chown -R fotostube:fotostube "$install_dir"
 wait_for_continue
 
 echo "==> PostgreSQL starten und aktivieren..."
-sudo systemctl enable postgresql
-sudo systemctl start postgresql
+$SUDO systemctl enable postgresql
+$SUDO systemctl start postgresql
 wait_for_continue
 
-sudo -u fotostube bash -c "cd $install_dir && npm install archiver date-fns sharp jsonwebtoken cookie-parser bcrypt dotenv"
+run_as fotostube "cd $install_dir && npm install archiver date-fns sharp jsonwebtoken cookie-parser bcrypt dotenv"
 wait_for_continue
 
 export PORT=5000
@@ -61,64 +128,57 @@ read -p "Geben Sie den PostgreSQL Benutzername ein (z.B. hefe): " pg_user
 read -sp "Geben Sie das Passwort für PostgreSQL Benutzer $pg_user ein: " pg_pass
 echo
 
-sudo -u postgres psql <<EOF
-CREATE DATABASE fotostube;
-CREATE USER $pg_user WITH PASSWORD '$pg_pass';
-GRANT ALL PRIVILEGES ON DATABASE fotostube TO $pg_user;
-EOF
+run_as postgres "psql -c \"CREATE DATABASE fotostube;\"" || true
+run_as postgres "psql -c \"CREATE USER $pg_user WITH PASSWORD '$pg_pass';\"" || true
+run_as postgres "psql -c \"GRANT ALL PRIVILEGES ON DATABASE fotostube TO $pg_user;\""
+
 wait_for_continue
 
 # Starkes JWT Secret generieren
 jwt_secret=$(openssl rand -hex 32)
 
 # .env Datei anlegen mit jwt_secret
-cat <<EOF | sudo tee "$install_dir/.env" >/dev/null
+echo "==> .env anlegen..."
+$SUDO bash -c "cat <<EOF > $install_dir/.env
 DATABASE_URL=postgresql://$pg_user:$pg_pass@localhost:5432/fotostube
 PORT=5000
 JWT_SECRET=$jwt_secret
-EOF
-sudo chown fotostube:fotostube "$install_dir/.env"
+EOF"
+$SUDO chown fotostube:fotostube "$install_dir/.env"
 
-sudo -u fotostube bash -c "cd $install_dir && npm run db:push"
+run_as fotostube "cd $install_dir && npm run db:push"
 wait_for_continue
 
-# Beispiel-Adminanlage (nur Name + Passwort, Rolle Admin)
 read -p "Geben Sie den Namen für den Admin ein: " admin_name
 read -sp "Geben Sie das Passwort für den Admin ein: " admin_pass
 echo
 
 # Passwort in Node.js mit bcrypt hashen
-hashed_pass=$(sudo -u fotostube bash -c "cd $install_dir && node -e \"const bcrypt = require('bcrypt'); bcrypt.hash(process.argv[1], 10).then(h => console.log(h));\" \"$admin_pass\"")
-
+hashed_pass=$(run_as fotostube "cd $install_dir && node -e \"const bcrypt = require('bcrypt'); bcrypt.hash(process.argv[1], 10).then(h => console.log(h));\" \"$admin_pass\"")
 
 # In DB einfügen
-psql postgresql://$pg_user:$pg_pass@localhost:5432/fotostube <<EOF
-INSERT INTO users (name, password, role) VALUES ('$admin_name', '$hashed_pass', 'Admin');
-EOF
+run_as postgres "psql postgresql://$pg_user:$pg_pass@localhost:5432/fotostube -c \"INSERT INTO users (name, password, role) VALUES ('$admin_name', '$hashed_pass', 'Admin');\""
 
-# Besitzer und Rechte sicherstellen
-sudo chown -R fotostube:fotostube "$install_dir"
+$SUDO chown -R fotostube:fotostube "$install_dir"
 
 echo "==> Abhängigkeiten installieren (Production, ohne dev)..."
-cd "$install_dir"
-sudo -u fotostube npm install
+run_as fotostube "cd $install_dir && npm install"
 
 echo "==> Build-Prozess starten..."
-cd "$install_dir"
-sudo -u fotostube npm run build
+run_as fotostube "cd $install_dir && npm run build"
 
 echo "==> .env mit Production-Umgebung anlegen..."
 jwt_secret=$(openssl rand -hex 32)
-cat <<EOF | sudo tee "$install_dir/.env" >/dev/null
+$SUDO bash -c "cat <<EOF > $install_dir/.env
 DATABASE_URL=postgresql://$pg_user:$pg_pass@localhost:5432/fotostube
 PORT=5000
 JWT_SECRET=$jwt_secret
 NODE_ENV=production
-EOF
-sudo chown fotostube:fotostube "$install_dir/.env"
+EOF"
+$SUDO chown fotostube:fotostube "$install_dir/.env"
 
 echo "==> Systemdienst für Production setzen..."
-sudo bash -c "cat <<EOF > /etc/systemd/system/fotostube.service
+$SUDO bash -c "cat <<EOF > /etc/systemd/system/fotostube.service
 [Unit]
 Description=Fotostube Production
 After=network.target
@@ -127,7 +187,7 @@ After=network.target
 Type=simple
 User=fotostube
 WorkingDirectory=$install_dir
-ExecStart=$(which npm) run start
+ExecStart=$(command -v npm) run start
 Restart=always
 Environment=NODE_ENV=production
 Environment=PORT=5000
@@ -136,11 +196,11 @@ Environment=PORT=5000
 WantedBy=multi-user.target
 EOF"
 
-sudo systemctl daemon-reload
-sudo systemctl enable fotostube.service
-sudo systemctl restart fotostube.service
+$SUDO systemctl daemon-reload
+$SUDO systemctl enable fotostube.service
+$SUDO systemctl restart fotostube.service
 
 echo "✅ Production Setup abgeschlossen!"
 echo "Fotostube läuft als Systemdienst im Production-Modus."
-echo "Logs ansehen:         sudo journalctl -u fotostube.service -f"
-echo "Service-Status:       sudo systemctl status fotostube.service"
+echo "Logs ansehen:         $SUDO journalctl -u fotostube.service -f"
+echo "Service-Status:       $SUDO systemctl status fotostube.service"
