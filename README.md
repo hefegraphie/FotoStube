@@ -1,4 +1,4 @@
-# FotoStube Produktiv-Setup
+### FotoStube Produktiv-Setup
 ## Installation & Start
 # Ubuntu
 ```
