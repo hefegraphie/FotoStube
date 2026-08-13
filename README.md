@@ -14,7 +14,7 @@
 ## 📸 Screenshots
 
 *(Screenshots werden hier ergänzt – die Platzhalter verweisen auf `docs/screenshots/`. Bitte echte Aufnahmen der jeweiligen Ansichten einfügen.)*
-
+![Admin Galerie-Übersicht](docs/screenshots/admin-galleries.png)
 | Ansicht | Datei |
 |---------|-------|
 | Admin – Galerie-Übersicht | `docs/screenshots/admin-galleries.png` |
