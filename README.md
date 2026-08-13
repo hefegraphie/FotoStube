@@ -4,8 +4,9 @@
 
 > FotoStube ist eine selbst gehostete Plattform, mit der Fotografen Galerien anlegen, Fotos hochladen und passwortgeschützt an Kunden freigeben können. Deine Daten bleiben auf deinem eigenen Server.
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Docker](https://img.shields.io/badge/Docker-Ready-2496ED?logo=docker&logoColor=white)](https://www.docker.com/)
+[![Docker Image](https://img.shields.io/badge/ghcr.io-hefegraphie%2Ffotostube-2496ED?logo=github&logoColor=white)](https://github.com/hefegraphie/FotoStube/pkgs/container/fotostube)
 [![Made for Photographers](https://img.shields.io/badge/Photography-Client%20Gallery-orange)](#)
 [![Self-hosted](https://img.shields.io/badge/Self--hosted-Yes-333333)](#)
 
@@ -194,7 +195,7 @@ Das Skript klont das FotoStube-Repo, installiert notwendige Pakete inklusive Pos
 
 ## 📄 Lizenz
 
-Das Projekt ist in der `package.json` als **MIT** deklariert. ⚠️ *Es existiert noch keine `LICENSE`-Datei im Repo – füge eine hinzu, wenn du die MIT-Lizenz offiziell freigeben möchtest. Ohne LICENSE-Datei gibt der Badge oben kein rechtsverbindliches Lizenzbild ab.*
+FotoStube ist unter der **MIT-Lizenz** lizenziert – siehe [LICENSE](LICENSE).
 
 ---
 
