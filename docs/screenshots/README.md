@@ -14,7 +14,8 @@ Dieser Ordner enthält die Screenshots, die in der README.md eingebunden werden.
 | Login | `login.png` | ⏳ ausstehend |
 
 ## Anleitung
-[![Admin Galerie-Übersicht](docs/screenshots/admin-galleries.png)]
+![Admin Galerie-Übersicht](docs/screenshots/admin-galleries.png)
+![PicPeak Gallery Preview](docs/screenshot-gallery.png)
 1. FotoStube starten und die jeweilige Ansicht öffnen.
 2. Screenshot als PNG in diesem Ordner speichern (Dateinamen aus der Tabelle übernehmen).
 3. In der `README.md` die Platzhalter durch echte Bild-Einbindungen ersetzen:
