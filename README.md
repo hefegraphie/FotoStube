@@ -14,9 +14,13 @@
 ## 📸 Screenshots
 
 ![Admin Galerie-Übersicht](docs/screenshots/admin-galleries.png)
+
 ![Admin Galerie-Übersicht](docs/screenshots/Gallerieerstellung)
+
 ![Admin Galerie-Übersicht](docs/screenshots/Gallerieoverview)
+
 ![Admin Galerie-Übersicht](docs/screenshots/Lightbox)
+
 ![Admin Galerie-Übersicht](docs/screenshots/settings)
 
 ## ✨ Features
