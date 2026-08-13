@@ -15,13 +15,13 @@
 
 ![Admin Galerie-Übersicht](docs/screenshots/admin-galleries.png)
 
-![Galerieerstellung](docs/screenshots/Gallerieerstellung)
+![Galerieerstellung](docs/screenshots/Gallerieerstellung.png)
 
-![Galerieoverview](docs/screenshots/Gallerieoverview)
+![Galerieoverview](docs/screenshots/Gallerieoverview.png)
 
-![Lightbox](docs/screenshots/Lightbox)
+![Lightbox](docs/screenshots/Lightbox.png)
 
-![settings](docs/screenshots/settings)
+![settings](docs/screenshots/settings.png)
 
 ## ✨ Features
 
