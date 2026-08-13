@@ -21,7 +21,7 @@
 
 ![Lightbox](docs/screenshots/Lightbox.png)
 
-![settings](docs/screenshots/settings.png)
+![settings](docs/screenshots/Settings.png)
 
 ## ✨ Features
 
