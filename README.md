@@ -1,11 +1,85 @@
-### FotoStube Produktiv-Setup
+# 🖼️ FotoStube
+
+**Self-hosted Client-Galerie & Fotografie-Portfolio** – Privatsphäre-freundliche Fotoübergabe an deine Kunden, ohne die Abhängigkeit von Drittanbieter-Clouds.
+
+> FotoStube ist eine selbst gehostete Plattform, mit der Fotografen Galerien anlegen, Fotos hochladen und passwortgeschützt an Kunden freigeben können. Deine Daten bleiben auf deinem eigenen Server.
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+[![Docker](https://img.shields.io/badge/Docker-Ready-2496ED?logo=docker&logoColor=white)](https://www.docker.com/)
+[![Made for Photographers](https://img.shields.io/badge/Photography-Client%20Gallery-orange)](#)
+[![Self-hosted](https://img.shields.io/badge/Self--hosted-Yes-333333)](#)
+
+---
+
+## 📸 Screenshots
+
+*(Screenshots werden hier ergänzt – die Platzhalter verweisen auf `docs/screenshots/`. Bitte echte Aufnahmen der jeweiligen Ansichten einfügen.)*
+
+| Ansicht | Datei |
+|---------|-------|
+| Admin – Galerie-Übersicht | `docs/screenshots/admin-galleries.png` |
+| Admin – Foto-Upload & Verwaltung | `docs/screenshots/admin-upload.png` |
+| Admin – Einstellungen | `docs/screenshots/admin-settings.png` |
+| Kunde – Öffentliche Galerie | `docs/screenshots/client-gallery.png` |
+| Kunde – Lightbox | `docs/screenshots/client-lightbox.png` |
+| Login | `docs/screenshots/login.png` |
+
+> **Hinweis für die Einbindung:** Sobald die Bilder in `docs/screenshots/` liegen, ersetze die Platzhalter-`src` weiter unten durch z. B. `docs/screenshots/admin-galleries.png` und füge hier Vorschaubilder ein.
+
+### Vorschau-Platzhalter
+
+```
+[![Admin Galerie-Übersicht](docs/screenshots/admin-galleries.png)](docs/screenshots/admin-galleries.png)
+[![Kunden-Galerie](docs/screenshots/client-gallery.png)](docs/screenshots/client-gallery.png)
+```
+
+---
+
+## ✨ Features
+
+- **Client-Galerien:** Galerien anlegen und einzelnen Kunden zuordnen
+- **Passwortschutz:** Galerien gezielt per Passwort/URL für Kunden freigeben
+- **Öffentliche Kundenansicht:** Elegante, responsive Galerie mit Lightbox
+- **Sub-Galerien & Ordnung:** Fotos strukturieren und sortieren
+- **Foto-Upload & Verwaltung:** Upload mit automatischer Thumbnail-Erstellung (Sharp)
+- **Benutzerverwaltung:** Mehrere Nutzer/Rollen (Admin)
+- **Benachrichtigungen:** Über Neuigkeiten informiert bleiben
+- **Dunkel-/Hellmodus** (Theme-Toggle)
+- **Self-hosted:** Läuft auf deinem eigenen Server – Daten bleiben bei dir
+- **Docker-basiert** – einfache Installation & Updates
+
+---
+
+## 🧰 Tech-Stack
+
+| Bereich | Technologie |
+|---------|-------------|
+| Frontend | React 18, TypeScript, Vite, Tailwind CSS, shadcn/ui (Radix) |
+| Backend | Node.js, Express |
+| Datenbank | PostgreSQL, Drizzle ORM |
+| Auth | JWT (HttpOnly-Cookies) |
+| Bildverarbeitung | Sharp |
+| Deployment | Docker & Docker Compose |
+
+---
+
+## 🚀 Schnellstart
+
+```bash
+git clone https://github.com/hefegraphie/FotoStube.git
+cd FotoStube
+# → siehe „Installation & Start" unten für Docker- bzw. Bare-Metal-Setup
+```
+
+---
 
 ## 🔒 Wichtiger Hinweis: HTTPS (SSL) zwingend erforderlich
+
 Um deine Daten bestmöglich zu schützen, setzt FotoStube auf strikte Sicherheitsstandards. Die Anmeldung und Sitzungsverwaltung erfolgt über sogenannte **JWT-Token**, die als streng gesicherte Cookies an deinen Browser gesendet werden.
 
 **Das bedeutet:** Moderne Browser blockieren diese Cookies, wenn die Verbindung nicht verschlüsselt ist. Rufst du FotoStube über das Netzwerk oder Internet nur mit unverschlüsseltem `http://...` auf, wird der Login fehlschlagen und viele Funktionen der App bleiben gesperrt. **Dies ist ein gewolltes Sicherheitsfeature und kein Fehler!**
 
-**Die Lösung:** Betreibe FotoStube immer hinter einem sogenannten **Reverse Proxy** (z. B. Nginx Proxy Manager, Traefik, Caddy oder Cloudflare Tunnels), der deine Domain mit einem gültigen SSL-Zertifikat (HTTPS) absichert. 
+**Die Lösung:** Betreibe FotoStube immer hinter einem sogenannten **Reverse Proxy** (z. B. Nginx Proxy Manager, Traefik, Caddy oder Cloudflare Tunnels), der deine Domain mit einem gültigen SSL-Zertifikat (HTTPS) absichert.
 *(Ausnahme: Lediglich beim reinen Testen direkt am eigenen PC über `http://localhost:5000` machen Browser oft eine Ausnahme).*
 
 ---
@@ -13,6 +87,7 @@ Um deine Daten bestmöglich zu schützen, setzt FotoStube auf strikte Sicherheit
 ## Installation & Start
 
 ### Variante A: Docker Installation (Empfohlen)
+
 Die Installation über Docker ist der einfachste und sauberste Weg, da keine direkten Systemeingriffe nötig sind. Bilder und Datenbank bleiben bei Updates erhalten.
 *(Voraussetzung: Docker und Docker Compose sind auf dem System installiert)*
 
@@ -69,7 +144,7 @@ services:
       db:
         condition: service_healthy
     environment:
-      - DATABASE_URL=postgresql://hefe:${DB_PASS}@db:5432/fotostube
+      - DATABASE_URL=postgresql://hefe:***@db:5432/fotostube
       - PORT=5000
       - NODE_ENV=production
       - JWT_SECRET=${JWT_SECRET}
@@ -128,7 +203,13 @@ Das Skript klont das FotoStube-Repo, installiert notwendige Pakete inklusive Pos
 - Das Skript pausiert nach jedem einzelnen Schritt zur Überprüfung, mit `Enter` bestätigen um fortzufahren.
 
 ---
+
+## 📄 Lizenz
+
+Das Projekt ist in der `package.json` als **MIT** deklariert. ⚠️ *Es existiert noch keine `LICENSE`-Datei im Repo – füge eine hinzu, wenn du die MIT-Lizenz offiziell freigeben möchtest. Ohne LICENSE-Datei gibt der Badge oben kein rechtsverbindliches Lizenzbild ab.*
+
+---
+
 # Wichtiger Disclaimer:
 Große Teile des Programms wurden mit KI geschrieben aber von mir persönlich nach bestem Wissen und Gewissen getestet.
 Ich nutze es nun schon seit 11.2025 produktiv.
-```
