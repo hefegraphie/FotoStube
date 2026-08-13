@@ -15,7 +15,7 @@
 
 ![Admin Galerie-Übersicht](docs/screenshots/admin-galleries.png)
 
-![Galerieerstellung)](docs/screenshots/Gallerieerstellung)
+![Galerieerstellung](docs/screenshots/Gallerieerstellung)
 
 ![Galerieoverview](docs/screenshots/Gallerieoverview)
 
