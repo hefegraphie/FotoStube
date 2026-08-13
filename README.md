@@ -13,31 +13,11 @@
 
 ## 📸 Screenshots
 
-*(Screenshots werden hier ergänzt – die Platzhalter verweisen auf `docs/screenshots/`. Bitte echte Aufnahmen der jeweiligen Ansichten einfügen.)*
 ![Admin Galerie-Übersicht](docs/screenshots/admin-galleries.png)
-![Admin Galerie-Übersicht](docs/screenshots/Lightbox)
 ![Admin Galerie-Übersicht](docs/screenshots/Gallerieerstellung)
+![Admin Galerie-Übersicht](docs/screenshots/Gallerieoverview)
+![Admin Galerie-Übersicht](docs/screenshots/Lightbox)
 ![Admin Galerie-Übersicht](docs/screenshots/settings)
-![Admin Galerie-Übersicht](docs/screenshots/Gallerie Übersicht)
-| Ansicht | Datei |
-|---------|-------|
-| Admin – Galerie-Übersicht | `docs/screenshots/admin-galleries.png` |
-| Admin – Foto-Upload & Verwaltung | `docs/screenshots/admin-upload.png` |
-| Admin – Einstellungen | `docs/screenshots/admin-settings.png` |
-| Kunde – Öffentliche Galerie | `docs/screenshots/client-gallery.png` |
-| Kunde – Lightbox | `docs/screenshots/client-lightbox.png` |
-| Login | `docs/screenshots/login.png` |
-
-> **Hinweis für die Einbindung:** Sobald die Bilder in `docs/screenshots/` liegen, ersetze die Platzhalter-`src` weiter unten durch z. B. `docs/screenshots/admin-galleries.png` und füge hier Vorschaubilder ein.
-
-### Vorschau-Platzhalter
-
-```
-[![Admin Galerie-Übersicht](docs/screenshots/admin-galleries.png)](docs/screenshots/admin-galleries.png)
-[![Kunden-Galerie](docs/screenshots/client-gallery.png)](docs/screenshots/client-gallery.png)
-```
-
----
 
 ## ✨ Features
 
