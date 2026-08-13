@@ -15,6 +15,10 @@
 
 *(Screenshots werden hier ergänzt – die Platzhalter verweisen auf `docs/screenshots/`. Bitte echte Aufnahmen der jeweiligen Ansichten einfügen.)*
 ![Admin Galerie-Übersicht](docs/screenshots/admin-galleries.png)
+![Admin Galerie-Übersicht](docs/screenshots/Lightbox)
+![Admin Galerie-Übersicht](docs/screenshots/Gallerieerstellung)
+![Admin Galerie-Übersicht](docs/screenshots/settings)
+![Admin Galerie-Übersicht](docs/screenshots/Gallerie Übersicht)
 | Ansicht | Datei |
 |---------|-------|
 | Admin – Galerie-Übersicht | `docs/screenshots/admin-galleries.png` |
