@@ -133,7 +133,7 @@ services:
       db:
         condition: service_healthy
     environment:
-      - DATABASE_URL=postgresql://hefe:DBP​ASS@db:5432/fotostube
+      - DATABASE_URL=postgresql://hefe:${DB_PASS}@db:5432/fotostube
       - PORT=5000
       - NODE_ENV=production
       - JWT_SECRET=${JWT_SECRET}
