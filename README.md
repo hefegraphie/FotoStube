@@ -152,7 +152,36 @@ Lade das System herunter und starte es im Hintergrund:
 docker-compose up -d
 ```
 
-**Fertig!** FotoStube ist jetzt unter `http://<deine-server-ip>:5000` erreichbar. Deine Bilder werden automatisch in dem neuen Ordner `./uploads` gespeichert. Updates installierst du künftig einfach mit `docker-compose pull && docker-compose up -d`.
+**Fertig!** FotoStube ist jetzt unter `http://<deine-server-ip>:5000` erreichbar. Deine Bilder werden automatisch in dem neuen Ordner `./uploads` gespeichert.
+
+---
+
+### FotoStube aktualisieren (Update)
+
+Wichtig zu wissen: `docker-compose up -d` allein **zieht kein neues Image**. Wenn auf deinem System bereits eine Version liegt, nutzt Docker einfach die vorhandene. Für ein Update musst du das neue Image erst explizit holen.
+
+**Standard-Weg (Schritt für Schritt):**
+```bash
+# 1. Neueste Version aus der Registry holen
+docker-compose pull
+
+# 2. Container mit der neuen Version neu starten
+docker-compose up -d
+```
+
+**Oder als Einzeiler mit beidem:**
+```bash
+docker-compose pull && docker-compose up -d
+```
+
+**Oder kurz & automatisch (zieht vor jedem Start zwingend die neueste Version):**
+```bash
+docker-compose up -d --pull always
+```
+
+Beim Update bleibt alles Wichtige erhalten: Deine Bilder (`./uploads`), die Logs (`./logs`) und deine Datenbank (Volume `pgdata`) werden **nicht** angefasst – nur die FotoStube-App selbst wird ersetzt. Die Datenbank-Struktur wird beim Start automatisch an das neue Schema angepasst.
+
+⚠️ **Achtung – Datenverlust vermeiden:** Nutze **niemals** `docker-compose down -v` für ein Update. Das `-v` löscht die Docker-Volumes und damit **komplett deine Datenbank und alle FotoStube-Daten unwiderruflich**.
 
 ---
 
