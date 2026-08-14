@@ -17,7 +17,7 @@ services:
       retries: 5
 
   app:
-    build: .
+    image: ghcr.io/hefegraphie/fotostube:latest
     restart: unless-stopped
     ports:
       - "5000:5000"
