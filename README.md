@@ -12,6 +12,7 @@
 
 ---
 
+
 ## 📸 Screenshots
 
 ![Admin Galerie-Übersicht](docs/screenshots/admin-galleries.png)
