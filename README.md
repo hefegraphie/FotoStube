@@ -154,6 +154,33 @@ docker-compose up -d
 
 **Fertig!** FotoStube ist jetzt unter `http://<deine-server-ip>:5000` erreichbar. Deine Bilder werden automatisch in dem neuen Ordner `./uploads` gespeichert.
 
+#### Upload-Ordner auf einen eigenen Pfad legen (Volume)
+
+FotoStube speichert hochgeladene Bilder **immer** unter dem Ordner `/app/uploads` **innerhalb des Containers** — dieser Pfad ist fest im Code verdrahtet und sollte nicht geändert werden. Über den **Volume-Bereich** im `docker-compose.yml` legst du jedoch fest, **wo** dieser Ordner auf deinem Host-System tatsächlich landet.
+
+Das funktioniert mit einem einfachen `Host-Pfad:/app/uploads`-Mount im Block `volumes:` des `app`-Dienstes:
+
+```yaml
+  app:
+    image: ghcr.io/hefegraphie/fotostube:latest
+    volumes:
+      - /dein/eigener/pfad:/app/uploads   # links: Host-Pfad, rechts: Pfad im Container (fix)
+```
+
+**Ein paar Beispiele:**
+
+| Zweck | Eintrag unter `volumes:` |
+|-------|--------------------------|
+| Standard (Ordner relativ im Projektverzeichnis) | `- ./uploads:/app/uploads` |
+| Absoluter Pfad (z. B. eigene Festplatte) | `- /data/fotostube/uploads:/app/uploads` |
+| NAS / Synology | `- /volume1/docker/fotostube/uploads:/app/uploads` |
+
+Wichtig dabei:
+- **Rechts vom Doppelpunkt bleibt immer `/app/uploads`** — das ist der Pfad, den die App intern verwendet.
+- **Links vom Doppelpunkt** kannst du **beliebig** wählen — dort werden deine Bilder physisch gespeichert.
+- Nach einer Änderung den Container neu erstellen: `docker-compose up -d`
+- Einmal hochgeladene Bilder landen immer in dem Verzeichnis, das aktuell gemountet ist. Wechselst du den Pfad, bleiben die alten Bilder am alten Ort liegen — sie werden **nicht** automatisch umgezogen.
+
 ---
 
 ### FotoStube aktualisieren (Update)
