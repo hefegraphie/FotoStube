@@ -11,7 +11,7 @@ app.use(cookieParser());
 app.use(express.json());
 
 // Register all application routes
-registerRoutes(app);
+await registerRoutes(app);
 
 // Setup Vite or static serving based on environment
 const server = createServer(app);
