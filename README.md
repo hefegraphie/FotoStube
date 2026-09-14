@@ -94,6 +94,7 @@ nano .env
 ```
 Füge folgenden Text ein und ersetze die Platzhalter durch eigene, sichere Werte:
 ```text
+DB_USER=dbuser
 DB_PASS=dein_super_sicheres_passwort
 JWT_SECRET=ein_sehr_langes_zufaelliges_geheimnis
 ```
