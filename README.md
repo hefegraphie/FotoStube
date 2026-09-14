@@ -113,13 +113,13 @@ services:
     image: postgres:15-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_USER: hefe
+      POSTGRES_USER: {DB_USER}
       POSTGRES_PASSWORD: ${DB_PASS}
       POSTGRES_DB: fotostube
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U hefe -d fotostube"]
+      test: ["CMD-SHELL", "pg_isready -U {DB_USER} -d fotostube"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -133,7 +133,7 @@ services:
       db:
         condition: service_healthy
     environment:
-      - DATABASE_URL=postgresql://hefe:${DB_PASS}@db:5432/fotostube
+      - DATABASE_URL=postgresql://{DB_USER}:${DB_PASS}@db:5432/fotostube
       - PORT=5000
       - NODE_ENV=production
       - JWT_SECRET=${JWT_SECRET}
