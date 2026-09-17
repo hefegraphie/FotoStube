@@ -243,12 +243,60 @@ export async function registerAuthRoutes(app: Express): Promise<void> {
         res.status(500).json({ error: "Fehler beim Zurücksetzen des Passworts" });
       }
     })
+  // Public endpoint: check if registration is enabled
+  app.get("/api/auth/registration-status", async (_req, res) => {
+    try {
+      const settings = await storage.getSystemSettings();
+      res.json({ enabled: settings?.registrationEnabled ?? false });
+    } catch (error) {
+      console.error("Error checking registration status:", error);
+      res.json({ enabled: false });
+    }
+  });
+
+  // Simple in-memory rate limiter for registration
+  const registerAttempts = new Map<string, { count: number; resetAt: number }>();
+  const REGISTER_RATE_LIMIT = 5;
+  const REGISTER_RATE_WINDOW = 15 * 60 * 1000; // 15 minutes
+
+  function checkRegisterRateLimit(ip: string): { allowed: boolean; retryAfter?: number } {
+    const now = Date.now();
+    const entry = registerAttempts.get(ip);
+    if (!entry || now > entry.resetAt) {
+      registerAttempts.set(ip, { count: 1, resetAt: now + REGISTER_RATE_WINDOW });
+      return { allowed: true };
+    }
+    if (entry.count >= REGISTER_RATE_LIMIT) {
+      const retryAfter = Math.ceil((entry.resetAt - now) / 1000);
+      return { allowed: false, retryAfter };
+    }
+    entry.count++;
+    return { allowed: true };
+  }
+
   app.post("/api/auth/register", async (req, res) => {
       try {
+        // Check if registration is enabled
+        const settings = await storage.getSystemSettings();
+        if (!settings?.registrationEnabled) {
+          return res.status(403).json({ error: "Registrierung ist derzeit nicht möglich" });
+        }
+
+        // Rate limit check
+        const clientIp = req.ip || req.socket.remoteAddress || "unknown";
+        const rateCheck = checkRegisterRateLimit(clientIp);
+        if (!rateCheck.allowed) {
+          res.set("Retry-After", String(rateCheck.retryAfter));
+          return res.status(429).json({ error: `Zu viele Versuche. Bitte in ${rateCheck.retryAfter} Sekunden erneut versuchen.` });
+        }
+
         const userData = insertUserSchema.parse(req.body);
 
         // Normalize email to lowercase
         userData.email = userData.email.toLowerCase();
+
+        // Force role to "Creator" for self-registration
+        userData.role = "Creator";
 
         // Check if user already exists by email (case-insensitive)
         const existingUserByEmail = await storage.getUserByEmail(userData.email);
@@ -264,9 +312,29 @@ export async function registerAuthRoutes(app: Express): Promise<void> {
           return res.status(409).json({ error: "Benutzername bereits vergeben" });
         }
 
+        // Validate password strength
+        if (userData.password && userData.password.length < 6) {
+          return res.status(400).json({ error: "Passwort muss mindestens 6 Zeichen lang sein" });
+        }
+
         const user = await storage.createUser(userData);
         const { password: _, ...userWithoutPassword } = user;
-        res.status(201).json({ user: userWithoutPassword });
+
+        // Auto-login: generate JWT and set cookie
+        const { generateToken } = await import("./auth");
+        const token = generateToken({
+          userId: user.id,
+          email: user.email,
+          role: user.role,
+        });
+        res.cookie("authToken", token, {
+          httpOnly: true,
+          secure: process.env.NODE_ENV === "production",
+          sameSite: "strict",
+          maxAge: 7 * 24 * 60 * 60 * 1000,
+        });
+
+        res.status(201).json({ user: userWithoutPassword, token });
       } catch (error) {
         if (error instanceof z.ZodError) {
           return res

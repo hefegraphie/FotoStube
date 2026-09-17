@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -15,6 +14,15 @@ export default function LoginForm() {
   const { login, isAuthenticated } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
+
+  // Registration state
+  const [isRegistering, setIsRegistering] = useState(false);
+  const [registrationEnabled, setRegistrationEnabled] = useState(false);
+  const [regName, setRegName] = useState("");
+  const [regEmail, setRegEmail] = useState("");
+  const [regPassword, setRegPassword] = useState("");
+  const [regPasswordConfirm, setRegPasswordConfirm] = useState("");
+  const [regError, setRegError] = useState("");
 
   // Check if initial setup is needed
   useEffect(() => {
@@ -34,6 +42,22 @@ export default function LoginForm() {
     
     checkSetup();
   }, [navigate]);
+
+  // Check if registration is enabled
+  useEffect(() => {
+    const checkRegistration = async () => {
+      try {
+        const response = await fetch('/api/auth/registration-status');
+        if (response.ok) {
+          const data = await response.json();
+          setRegistrationEnabled(data.enabled);
+        }
+      } catch (error) {
+        console.error('Error checking registration status:', error);
+      }
+    };
+    checkRegistration();
+  }, []);
 
   // Redirect if already logged in
   useEffect(() => {
@@ -74,6 +98,154 @@ export default function LoginForm() {
     }
   };
 
+  const handleRegister = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLoading(true);
+    setRegError("");
+
+    // Client-side validation
+    if (!regName.trim() || !regEmail.trim() || !regPassword) {
+      setRegError("Alle Felder sind erforderlich");
+      setIsLoading(false);
+      return;
+    }
+    if (regPassword.length < 6) {
+      setRegError("Passwort muss mindestens 6 Zeichen lang sein");
+      setIsLoading(false);
+      return;
+    }
+    if (regPassword !== regPasswordConfirm) {
+      setRegError("Passwörter stimmen nicht überein");
+      setIsLoading(false);
+      return;
+    }
+    if (!regEmail.includes("@")) {
+      setRegError("Bitte eine gültige E-Mail-Adresse eingeben");
+      setIsLoading(false);
+      return;
+    }
+
+    try {
+      const response = await fetch("/api/auth/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: regName.trim(),
+          email: regEmail.trim().toLowerCase(),
+          password: regPassword,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        setRegError(data.error || "Registrierung fehlgeschlagen");
+        return;
+      }
+
+      // Store token and redirect
+      if (data.token) {
+        localStorage.setItem("authToken", data.token);
+      }
+
+      toast({
+        title: "Registrierung erfolgreich",
+        description: "Willkommen! Du bist jetzt angemeldet.",
+      });
+
+      // Reload to pick up auth state
+      window.location.href = "/galleries";
+    } catch (err) {
+      setRegError("Ein Fehler ist aufgetreten");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Registration view
+  if (isRegistering) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center p-6">
+        <Card className="w-full max-w-md">
+          <CardHeader>
+            <CardTitle className="text-2xl text-center">Konto erstellen</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleRegister} className="space-y-4">
+              <div>
+                <Input
+                  type="text"
+                  placeholder="Name (öffentlich sichtbar)"
+                  value={regName}
+                  onChange={(e) => setRegName(e.target.value)}
+                  required
+                  data-testid="input-register-name"
+                />
+              </div>
+              <div>
+                <Input
+                  type="email"
+                  placeholder="E-Mail"
+                  value={regEmail}
+                  onChange={(e) => setRegEmail(e.target.value)}
+                  required
+                  data-testid="input-register-email"
+                />
+              </div>
+              <div>
+                <Input
+                  type="password"
+                  placeholder="Passwort (mind. 6 Zeichen)"
+                  value={regPassword}
+                  onChange={(e) => setRegPassword(e.target.value)}
+                  required
+                  minLength={6}
+                  data-testid="input-register-password"
+                />
+              </div>
+              <div>
+                <Input
+                  type="password"
+                  placeholder="Passwort bestätigen"
+                  value={regPasswordConfirm}
+                  onChange={(e) => setRegPasswordConfirm(e.target.value)}
+                  required
+                  minLength={6}
+                  data-testid="input-register-password-confirm"
+                />
+              </div>
+              {regError && (
+                <p className="text-sm text-destructive" data-testid="text-register-error">
+                  {regError}
+                </p>
+              )}
+              <Button
+                type="submit"
+                className="w-full"
+                disabled={isLoading}
+                data-testid="button-register"
+              >
+                {isLoading ? "Registrieren..." : "Registrieren"}
+              </Button>
+              <Button
+                type="button"
+                variant="link"
+                className="w-full text-sm text-muted-foreground"
+                onClick={() => {
+                  setIsRegistering(false);
+                  setRegError("");
+                }}
+              >
+                Bereits ein Konto? Anmelden
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  // Login view
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-6">
       <Card className="w-full max-w-md">
@@ -123,6 +295,27 @@ export default function LoginForm() {
             >
               Passwort vergessen?
             </Button>
+            {registrationEnabled && (
+              <>
+                <div className="relative my-4">
+                  <div className="absolute inset-0 flex items-center">
+                    <span className="w-full border-t" />
+                  </div>
+                  <div className="relative flex justify-center text-xs uppercase">
+                    <span className="bg-background px-2 text-muted-foreground">oder</span>
+                  </div>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => setIsRegistering(true)}
+                  data-testid="button-goto-register"
+                >
+                  Neues Konto erstellen
+                </Button>
+              </>
+            )}
           </form>
         </CardContent>
       </Card>
