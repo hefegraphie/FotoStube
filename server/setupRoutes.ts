@@ -145,7 +145,7 @@ export async function registerSetupRoutes(app: Express): Promise<void> {
       requireAdmin,
       async (req: any, res) => {
         try {
-          const { smtpHost, smtpPort, smtpUser, smtpPassword, smtpFrom, appUrl } =
+          const { smtpHost, smtpPort, smtpUser, smtpPassword, smtpFrom, appUrl, registrationEnabled } =
             req.body;
 
           await storage.updateSystemSettings({
@@ -155,6 +155,7 @@ export async function registerSetupRoutes(app: Express): Promise<void> {
             smtpPassword,
             smtpFrom,
             appUrl,
+            registrationEnabled,
           });
 
           res.json({ success: true });
