@@ -317,6 +317,9 @@ export async function registerAuthRoutes(app: Express): Promise<void> {
           return res.status(400).json({ error: "Passwort muss mindestens 6 Zeichen lang sein" });
         }
 
+        // Hash password before storing (same as createInitialAdmin)
+        userData.password = await bcrypt.hash(userData.password, 10);
+
         const user = await storage.createUser(userData);
         const { password: _, ...userWithoutPassword } = user;
 
