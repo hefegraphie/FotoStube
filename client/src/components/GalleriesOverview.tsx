@@ -1730,6 +1730,15 @@ export default function GalleriesOverview({ onSelectGallery, onOpenSettings }: G
             </div>
           </div>
         )}
+          <a
+            href="https://www.paypal.com/donate/?hosted_button_id=LTAYJRK9C2TBC"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-amber-700 bg-amber-50 hover:bg-amber-100 rounded-lg transition-colors"
+          >
+            <span className="hidden md:inline">Spendiere mir einen Kaffee</span>
+            <span>☕</span>
+          </a>
           </div>
               </div>
             </div>
