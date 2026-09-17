@@ -94,7 +94,7 @@ export default function UsersOverview() {
 
   // Set page title
   useEffect(() => {
-    document.title = `Gallerien - ${companyName}`;
+    document.title = `Galerien - ${companyName}`;
   }, [companyName]);
 
   const filterAndSortGalleries = (galleries: any[]) => {
@@ -245,7 +245,7 @@ export default function UsersOverview() {
                 <h1
                   className="text-3xl font-semibold mb-3"
                   data-testid="text-galleries-title"
-                >{user?.name ? `${user.name} Gallerien` : "Gallerien"}
+                >{user?.name ? `${user.name} Galerien` : "Galerien"}
                 </h1>
               </div>
               <div className="flex items-center space-x-3">
@@ -280,7 +280,7 @@ export default function UsersOverview() {
                 <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
                   <Input
                     type="text"
-                    placeholder="Gallerien durchsuchen..."
+                    placeholder="Galerien durchsuchen..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     className="w-full sm:w-64"
@@ -316,12 +316,12 @@ export default function UsersOverview() {
               </div>
             </div>
 
-            {/* Gallerien Grid */}
+            {/* Galerien Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-6 gap-8">
               {filterAndSortGalleries(galleries).length === 0 &&
               searchQuery.trim() ? (
                 <div className="col-span-full text-center py-12 text-muted-foreground">
-                  Keine Gallerien gefunden für "{searchQuery}"
+                  Keine Galerien gefunden für "{searchQuery}"
                 </div>
               ) : null}
               {filterAndSortGalleries(galleries).map((gallery) => (

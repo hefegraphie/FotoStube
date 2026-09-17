@@ -113,7 +113,7 @@ export default function GalleriesOverview({ onSelectGallery, onOpenSettings }: G
 
   // Set page title
   useEffect(() => {
-    document.title = `Gallerien - ${companyName}`;
+    document.title = `Galerien - ${companyName}`;
   }, [companyName]);
 
   const generatePassword = (length: number = 12): string => {
@@ -583,7 +583,7 @@ export default function GalleriesOverview({ onSelectGallery, onOpenSettings }: G
     }
 
     toast({
-      title: successCount > 0 ? "Gallerien gelöscht" : "Fehler",
+      title: successCount > 0 ? "Galerien gelöscht" : "Fehler",
       description: `${successCount} Galerie(n) gelöscht${errorCount > 0 ? `, ${errorCount} fehlgeschlagen` : ''}`,
       variant: errorCount > 0 ? "destructive" : "default",
     });
@@ -623,7 +623,7 @@ export default function GalleriesOverview({ onSelectGallery, onOpenSettings }: G
     }
 
     toast({
-      title: successCount > 0 ? "Gallerien zugewiesen" : "Fehler",
+      title: successCount > 0 ? "Galerien zugewiesen" : "Fehler",
       description: `${successCount} Galerie(n) zugewiesen${errorCount > 0 ? `, ${errorCount} fehlgeschlagen` : ''}`,
       variant: errorCount > 0 ? "destructive" : "default",
     });
@@ -801,7 +801,7 @@ export default function GalleriesOverview({ onSelectGallery, onOpenSettings }: G
           {/* Titel und User-Aktionen */}
           <div className="flex items-center justify-between">
             <h1 className="text-xl sm:text-2xl font-semibold" data-testid="text-galleries-title">
-              {user?.name} Gallerien
+              {user?.name} Galerien
             </h1>
             <div className="flex items-center gap-2 lg:hidden">
               <NotificationBell />
@@ -1294,11 +1294,11 @@ export default function GalleriesOverview({ onSelectGallery, onOpenSettings }: G
         </Dialog>
 
 
-        {/* Gallerien Grid */}
+        {/* Galerien Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
           {filterAndSortGalleries(galleries).length === 0 && searchQuery.trim() ? (
             <div className="col-span-full text-center py-12 text-muted-foreground">
-              Keine Gallerien gefunden für "{searchQuery}"
+              Keine Galerien gefunden für "{searchQuery}"
             </div>
           ) : null}
           {filterAndSortGalleries(galleries).map((gallery) => (
@@ -1432,9 +1432,9 @@ export default function GalleriesOverview({ onSelectGallery, onOpenSettings }: G
         <Dialog open={isBatchAssignDialogOpen} onOpenChange={setIsBatchAssignDialogOpen}>
           <DialogContent className="sm:max-w-[600px]">
             <DialogHeader>
-              <DialogTitle>Gallerien zuweisen ({selectedGalleryIds.size} ausgewählt)</DialogTitle>
+              <DialogTitle>Galerien zuweisen ({selectedGalleryIds.size} ausgewählt)</DialogTitle>
               <DialogDescription>
-                Weise die ausgewählten Gallerien anderen Benutzern zu.
+                Weise die ausgewählten Galerien anderen Benutzern zu.
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4 py-4">

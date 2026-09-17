@@ -112,7 +112,7 @@ function GalleriesOverview() {
       <Suspense
         fallback={
           <div className="flex justify-center items-center h-screen">
-            <p>Lädt Gallerien...</p>
+            <p>Lädt Galerien...</p>
           </div>
         }
       >
@@ -652,7 +652,7 @@ function GalleryView() {
 
   const getBreadcrumbItems = () => {
     const items = [
-      { label: "Gallerien", onClick: () => {
+      { label: "Galerien", onClick: () => {
         handleClearSelection();
         navigate("/galleries");
       }},
