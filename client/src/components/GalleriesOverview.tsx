@@ -1730,15 +1730,6 @@ export default function GalleriesOverview({ onSelectGallery, onOpenSettings }: G
             </div>
           </div>
         )}
-          <a
-            href="https://www.paypal.com/donate/?hosted_button_id=LTAYJRK9C2TBC"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-amber-700 bg-amber-50 hover:bg-amber-100 rounded-lg transition-colors"
-          >
-            <span className="hidden md:inline">Spendiere mir einen Kaffee</span>
-            <span>☕</span>
-          </a>
           </div>
               </div>
             </div>
@@ -1758,6 +1749,18 @@ export default function GalleriesOverview({ onSelectGallery, onOpenSettings }: G
           )}
         </button>
       </div>
+
+        {/* Floating Donate Button */}
+        <a
+          href="https://www.paypal.com/donate/?hosted_button_id=LTAYJRK9C2TBC"
+          target="_blank"
+          rel="noopener noreferrer"
+          title="Spendiere mir einen Kaffee"
+          className="fixed bottom-6 right-6 z-50 w-14 h-14 flex items-center justify-center rounded-full bg-amber-500 hover:bg-amber-600 shadow-lg transition-colors text-2xl"
+          style={{ lineHeight: 1 }}
+        >
+          ☕
+        </a>
     </div>
   );
 }
