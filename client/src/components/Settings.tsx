@@ -3,6 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
@@ -78,6 +79,7 @@ export default function Settings({ onBack, hideUserManagement = false }: Setting
     smtpPassword: "",
     smtpFrom: "",
     appUrl: "",
+    registrationEnabled: false,
   });
   const [showSmtpPassword, setShowSmtpPassword] = useState(false);
 
@@ -126,6 +128,7 @@ export default function Settings({ onBack, hideUserManagement = false }: Setting
         smtpPassword: systemSettingsData.smtpPassword || "",
         smtpFrom: systemSettingsData.smtpFrom || "",
         appUrl: systemSettingsData.appUrl || "",
+        registrationEnabled: systemSettingsData.registrationEnabled ?? false,
       };
       console.log("Setting system settings to:", settings);
       setSystemSettings(settings);
@@ -210,6 +213,7 @@ export default function Settings({ onBack, hideUserManagement = false }: Setting
           smtpPassword: systemSettings.smtpPassword.trim() || null,
           smtpFrom: systemSettings.smtpFrom.trim() || null,
           appUrl: systemSettings.appUrl.trim() || null,
+          registrationEnabled: systemSettings.registrationEnabled,
         }),
       });
 
@@ -718,6 +722,40 @@ export default function Settings({ onBack, hideUserManagement = false }: Setting
           {/* System Tab (Admin only) */}
           {!hideUserManagement && user?.role === "Admin" && (
             <TabsContent value="system" className="space-y-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Registrierung</CardTitle>
+                  <CardDescription>
+                    Erlaube neuen Nutzern sich als "Creator" zu registrieren
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <Label htmlFor="registration-toggle">Registrierung erlauben</Label>
+                      <p className="text-sm text-muted-foreground">
+                        Wenn aktiviert, können sich neue Creator-Konten erstellen
+                      </p>
+                    </div>
+                    <Switch
+                      id="registration-toggle"
+                      checked={systemSettings.registrationEnabled}
+                      onCheckedChange={(checked) => {
+                        setSystemSettings({ ...systemSettings, registrationEnabled: checked });
+                      }}
+                    />
+                  </div>
+                  <div className="mt-4">
+                    <Button
+                      type="button"
+                      disabled={isLoading}
+                      onClick={handleSystemSettingsUpdate}
+                    >
+                      {isLoading ? "Wird gespeichert..." : "Speichern"}
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
               <Card>
                 <CardHeader>
                   <CardTitle>SMTP Einstellungen</CardTitle>

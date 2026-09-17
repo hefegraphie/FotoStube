@@ -107,6 +107,7 @@ export const systemSettings = pgTable("system_settings", {
   smtpPassword: text("smtp_password"),
   smtpFrom: text("smtp_from"),
   appUrl: text("app_url"),
+  registrationEnabled: boolean("registration_enabled").notNull().default(false),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
