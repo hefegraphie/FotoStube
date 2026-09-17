@@ -323,21 +323,7 @@ export async function registerAuthRoutes(app: Express): Promise<void> {
         const user = await storage.createUser(userData);
         const { password: _, ...userWithoutPassword } = user;
 
-        // Auto-login: generate JWT and set cookie
-        const { generateToken } = await import("./auth");
-        const token = generateToken({
-          userId: user.id,
-          email: user.email,
-          role: user.role,
-        });
-        res.cookie("authToken", token, {
-          httpOnly: true,
-          secure: process.env.NODE_ENV === "production",
-          sameSite: "strict",
-          maxAge: 7 * 24 * 60 * 60 * 1000,
-        });
-
-        res.status(201).json({ user: userWithoutPassword, token });
+        res.status(201).json({ user: userWithoutPassword });
       } catch (error) {
         if (error instanceof z.ZodError) {
           return res

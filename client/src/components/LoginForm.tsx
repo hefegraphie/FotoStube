@@ -143,18 +143,13 @@ export default function LoginForm() {
         return;
       }
 
-      // Store token and redirect
-      if (data.token) {
-        localStorage.setItem("authToken", data.token);
-      }
-
       toast({
         title: "Registrierung erfolgreich",
-        description: "Willkommen! Du bist jetzt angemeldet.",
+        description: "Dein Konto wurde erstellt. Bitte melde dich jetzt an.",
       });
 
-      // Reload to pick up auth state
-      window.location.href = "/galleries";
+      // Switch back to login form
+      setIsRegistering(false);
     } catch (err) {
       setRegError("Ein Fehler ist aufgetreten");
     } finally {
